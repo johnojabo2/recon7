@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: r7-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: recon7
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: reconpassword123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d recon7"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: r7-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:reconpassword123@postgres:5432/recon7
+      ALLOW_ALL_SCOPES_DEV: ${ALLOW_ALL_SCOPES_DEV:-false}
+    ports:
+      - "8000:8000"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build: .
+    container_name: r7-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:reconpassword123@postgres:5432/recon7
+      ALLOW_ALL_SCOPES_DEV: ${ALLOW_ALL_SCOPES_DEV:-false}
+    command: python worker.py
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: r7-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+      - "80:80"
+
+volumes:
+  postgres_data:

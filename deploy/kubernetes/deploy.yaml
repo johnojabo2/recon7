@@ -1,0 +1,286 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: recon7
+  labels:
+    app.kubernetes.io/name: recon7
+    app.kubernetes.io/part-of: recon7-platform
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: r7-config
+  namespace: recon7
+data:
+  LITELLM_MODEL: "claude-sonnet-4-5-20250929"
+  SEARCH_CACHE_TTL_DAYS: "7"
+  MASSCAN_BIN: "/usr/bin/masscan"
+  NMAP_BIN: "/usr/bin/nmap"
+  SUBFINDER_BIN: "/usr/bin/subfinder"
+  HTTPX_BIN: "/usr/bin/httpx"
+  NUCLEI_BIN: "/usr/bin/nuclei"
+  ALLOW_ALL_SCOPES_DEV: "false"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: r7-secrets
+  namespace: recon7
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://postgres:reconpassword123@r7-postgres:5432/recon7"
+  JWT_SECRET: "r7-super-secret-key-change-me-in-production-min-32-chars-long"
+  ANTHROPIC_API_KEY: ""
+  OPENAI_API_KEY: ""
+  SERPAPI_API_KEY: ""
+  GITHUB_TOKEN: ""
+  CENSYS_API_ID: ""
+  CENSYS_API_SECRET: ""
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: r7-postgres-pvc
+  namespace: recon7
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: r7-postgres
+  namespace: recon7
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: r7-postgres
+  template:
+    metadata:
+      labels:
+        app: r7-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: recon7
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: reconpassword123
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: r7-postgres-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: r7-postgres
+  namespace: recon7
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: r7-postgres
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: r7-api
+  namespace: recon7
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: r7-api
+  template:
+    metadata:
+      labels:
+        app: r7-api
+    spec:
+      containers:
+        - name: api
+          image: recon7/api:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: r7-config
+            - secretRef:
+                name: r7-secrets
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: r7-api
+  namespace: recon7
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: r7-api
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: r7-worker
+  namespace: recon7
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: r7-worker
+  template:
+    metadata:
+      labels:
+        app: r7-worker
+    spec:
+      containers:
+        - name: worker
+          image: recon7/worker:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "worker.py"]
+          envFrom:
+            - configMapRef:
+                name: r7-config
+            - secretRef:
+                name: r7-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: r7-frontend
+  namespace: recon7
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: r7-frontend
+  template:
+    metadata:
+      labels:
+        app: r7-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: recon7/frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: r7-frontend
+  namespace: recon7
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: r7-frontend
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: r7-ingress
+  namespace: recon7
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - recon7.yourdomain.com
+      secretName: r7-tls-cert
+  rules:
+    - host: recon7.yourdomain.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: r7-api
+                port:
+                  number: 8080
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: r7-api
+                port:
+                  number: 8080
+          - path: /integrations
+            pathType: Prefix
+            backend:
+              service:
+                name: r7-api
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: r7-frontend
+                port:
+                  number: 80

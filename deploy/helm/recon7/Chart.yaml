@@ -1,0 +1,15 @@
+apiVersion: v2
+name: recon7
+description: Cloud-Native Autonomous Attack Surface Reconnaissance & Red Team Triage Platform
+type: application
+version: 1.0.0
+appVersion: "7.0.0"
+keywords:
+  - osint
+  - attack-surface-management
+  - security
+  - red-team
+  - penetration-testing
+maintainers:
+  - name: Recon7 Core Team
+    email: ops@recon7.io

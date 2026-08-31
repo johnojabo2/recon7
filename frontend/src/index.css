@@ -1,0 +1,560 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-void-rgb: 10 10 15;
+    --bg-panel-rgb: 18 18 26;
+    --bg-panel-elevated-rgb: 24 24 36;
+    --bg-panel-subtle-rgb: 14 14 20;
+    --border-dim-rgb: 35 35 48;
+    --border-bright-rgb: 52 52 74;
+    --cyan-signal-rgb: 0 240 255;
+    --magenta-alert-rgb: 255 46 136;
+    --success-green-rgb: 0 255 156;
+    --text-primary-rgb: 232 232 240;
+    --text-dim-rgb: 148 163 184;
+    --text-muted-rgb: 100 116 139;
+
+    --bg-void: #0A0A0F;
+    --bg-panel: #12121A;
+    --bg-panel-elevated: #181824;
+    --bg-panel-subtle: #0E0E14;
+    --border-dim: #232330;
+    --border-bright: #34344A;
+    --cyan-signal: #00F0FF;
+    --magenta-alert: #FF2E88;
+    --success-green: #00FF9C;
+    --text-primary: #E8E8F0;
+    --text-dim: #94A3B8;
+    --text-muted: #64748B;
+  }
+
+  [data-theme='light'], html.light {
+    --bg-void-rgb: 248 250 252;
+    --bg-panel-rgb: 255 255 255;
+    --bg-panel-elevated-rgb: 241 245 249;
+    --bg-panel-subtle-rgb: 248 250 252;
+    --border-dim-rgb: 226 232 240;
+    --border-bright-rgb: 203 213 225;
+    --cyan-signal-rgb: 2 132 199;
+    --magenta-alert-rgb: 220 38 38;
+    --success-green-rgb: 22 163 74;
+    --text-primary-rgb: 15 23 42;
+    --text-dim-rgb: 71 85 105;
+    --text-muted-rgb: 100 116 139;
+
+    --bg-void: #F8FAFC;
+    --bg-panel: #FFFFFF;
+    --bg-panel-elevated: #F1F5F9;
+    --bg-panel-subtle: #F8FAFC;
+    --border-dim: #E2E8F0;
+    --border-bright: #CBD5E1;
+    --cyan-signal: #0284C7;
+    --magenta-alert: #DC2626;
+    --success-green: #16A34A;
+    --text-primary: #0F172A;
+    --text-dim: #475569;
+    --text-muted: #64748B;
+  }
+
+  body {
+    background-color: var(--bg-void);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* Custom Sleek Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--bg-void);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-dim);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-bright);
+  }
+}
+
+/* Glassmorphism & Panel Surfaces */
+.panel-glass {
+  background: rgba(18, 18, 26, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(35, 35, 48, 0.8);
+}
+
+[data-theme='light'] .panel-glass,
+html.light .panel-glass {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.panel-glass:hover {
+  border-color: rgba(52, 52, 74, 0.9);
+}
+
+[data-theme='light'] .panel-glass:hover,
+html.light .panel-glass:hover {
+  border-color: #CBD5E1;
+}
+
+.glow-cyan-border {
+  border-color: var(--cyan-signal) !important;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.25);
+}
+
+.glow-magenta-border {
+  border-color: var(--magenta-alert) !important;
+  box-shadow: 0 0 15px rgba(255, 46, 136, 0.25);
+}
+
+/* Circuit Pipeline Connector Flow Animations */
+@keyframes pipelineFlow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-pipeline-flow {
+  animation: pipelineFlow 1.2s linear infinite;
+}
+
+@keyframes signalPacketPulse {
+  0% {
+    offset-distance: 0%;
+    opacity: 0.2;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0.2;
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =========================================================
+   Executive AI Security Report Typography & Table Styling
+   ========================================================= */
+/* =========================================================
+   Executive Security Report Typography & Table Styling
+   ========================================================= */
+.report-markdown {
+  color: var(--text-primary);
+  line-height: 1.75;
+  font-size: 0.875rem;
+}
+
+.report-markdown h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--cyan-signal);
+}
+
+.report-markdown h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--cyan-signal);
+  letter-spacing: -0.01em;
+  margin-top: 2.25rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.report-markdown h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.report-markdown p {
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+  line-height: 1.65;
+}
+
+.report-markdown strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.report-markdown em {
+  color: var(--cyan-signal);
+  font-style: normal;
+}
+
+.report-markdown ul,
+.report-markdown ol {
+  margin-top: 0.5rem;
+  margin-bottom: 1.25rem;
+  padding-left: 1.5rem;
+}
+
+.report-markdown ul {
+  list-style-type: square;
+}
+
+.report-markdown ol {
+  list-style-type: decimal;
+}
+
+.report-markdown li {
+  color: var(--text-dim);
+  margin-bottom: 0.4rem;
+  line-height: 1.6;
+}
+
+.report-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--border-dim);
+  margin: 2rem 0;
+}
+
+.report-markdown blockquote {
+  border-left: 3px solid var(--cyan-signal);
+  background: var(--bg-panel-elevated);
+  padding: 0.75rem 1.25rem;
+  margin: 1.25rem 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: var(--text-dim);
+}
+
+/* Executive Cybersecurity Table Formatting */
+.report-markdown table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5rem 0 2rem 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border-dim);
+  background: var(--bg-panel);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.report-markdown thead {
+  background: var(--bg-panel-elevated);
+}
+
+.report-markdown th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cyan-signal);
+  border-bottom: 2px solid var(--border-bright);
+  white-space: nowrap;
+}
+
+.report-markdown td {
+  padding: 0.65rem 1rem;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  border-bottom: 1px solid var(--border-dim);
+  vertical-align: top;
+}
+
+.report-markdown tbody tr:nth-child(even) {
+  background: var(--bg-panel-subtle);
+}
+
+.report-markdown tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.report-markdown tbody tr:hover {
+  background: var(--bg-panel-elevated);
+}
+
+.report-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--bg-panel-elevated);
+  border: 1px solid var(--border-dim);
+  color: var(--cyan-signal);
+}
+
+.report-markdown pre {
+  background: var(--bg-panel-subtle);
+  border: 1px solid var(--border-dim);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1.25rem 0;
+  overflow-x: auto;
+}
+
+.report-markdown pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+}
+
+/* =====================================================================
+   ENTERPRISE PRINT & PDF EXPORT STYLESHEET (CLEAN CORPORATE LIGHT THEME)
+   ===================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 8mm 8mm 8mm;
+  }
+
+  /* 1. Global Reset & Chrome Stripping */
+  html, body {
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: 9pt !important;
+    line-height: 1.4 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 2. Hide all application shell chrome & non-printable elements */
+  aside,
+  nav,
+  header,
+  .no-print,
+  button,
+  .top-bar,
+  .sidebar,
+  .action-toolbar,
+  .modal,
+  .ai-disclaimer-banner {
+    display: none !important;
+  }
+
+  /* 3. Force main container to occupy full page without gaps */
+  main,
+  .min-h-screen,
+  .max-w-7xl,
+  .max-w-5xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #FFFFFF !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  /* 4. Enterprise Printable Document Container */
+  .enterprise-report-document {
+    display: block !important;
+    width: 100% !important;
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* 5. Natural Page Flow (No accidental blank gaps) */
+  .page-break {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  .avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 6. Typography & Headings */
+  .enterprise-report-document h1 {
+    color: #0F172A !important;
+    font-size: 16pt !important;
+    font-weight: 800 !important;
+    border-bottom: 2px solid #0284C7 !important;
+    padding-bottom: 3pt !important;
+    margin-top: 8pt !important;
+    margin-bottom: 6pt !important;
+  }
+
+  .enterprise-report-document h2 {
+    color: #0F172A !important;
+    font-size: 12pt !important;
+    font-weight: 700 !important;
+    border-bottom: 1px solid #CBD5E1 !important;
+    padding-bottom: 2pt !important;
+    margin-top: 8pt !important;
+    margin-bottom: 4pt !important;
+  }
+
+  .enterprise-report-document h3 {
+    color: #1E293B !important;
+    font-size: 10.5pt !important;
+    font-weight: 600 !important;
+    margin-top: 5pt !important;
+    margin-bottom: 2pt !important;
+  }
+
+  .enterprise-report-document p {
+    color: #334155 !important;
+    font-size: 8.5pt !important;
+    margin-bottom: 4pt !important;
+  }
+
+  /* 7. Executive Cards & Tables in Print - Pure Light Contrast */
+  .enterprise-card,
+  .panel-glass {
+    background: #FFFFFF !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 4px !important;
+    color: #0F172A !important;
+    box-shadow: none !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    padding: 8pt !important;
+    margin-bottom: 6pt !important;
+  }
+
+  .enterprise-report-document table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin: 6pt 0 !important;
+    background: #FFFFFF !important;
+    font-size: 7.5pt !important;
+    border: 1px solid #CBD5E1 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .enterprise-report-document th {
+    background: #F1F5F9 !important;
+    color: #0F172A !important;
+    border: 1px solid #CBD5E1 !important;
+    font-weight: 700 !important;
+    padding: 3pt 5pt !important;
+    text-align: left !important;
+  }
+
+  .enterprise-report-document td {
+    color: #1E293B !important;
+    border: 1px solid #E2E8F0 !important;
+    padding: 3pt 5pt !important;
+    vertical-align: top !important;
+  }
+
+  .enterprise-report-document tr:nth-child(even) {
+    background: #F8FAFC !important;
+  }
+
+  .enterprise-report-document code {
+    background: #F1F5F9 !important;
+    color: #0369A1 !important;
+    border: 1px solid #E2E8F0 !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+    font-size: 7pt !important;
+    padding: 1pt 3pt !important;
+    border-radius: 2px !important;
+  }
+
+  .enterprise-report-document pre {
+    background: #F8FAFC !important;
+    color: #0F172A !important;
+    border: 1px solid #CBD5E1 !important;
+    padding: 5pt !important;
+    border-radius: 3px !important;
+    font-size: 7pt !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 8. High-Contrast Print Chips & Boxes */
+  .remediation-box-print {
+    background: #ECFDF5 !important;
+    border: 1px solid #A7F3D0 !important;
+    color: #065F46 !important;
+    padding: 4pt 6pt !important;
+    border-radius: 3px !important;
+    font-size: 7.5pt !important;
+  }
+
+  .evidence-box-print {
+    background: #F8FAFC !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #0F172A !important;
+    padding: 4pt 6pt !important;
+    border-radius: 3px !important;
+    font-size: 7pt !important;
+  }
+
+  .chip-critical {
+    background: #FEE2E2 !important;
+    color: #991B1B !important;
+    border: 1px solid #F87171 !important;
+    font-weight: 700 !important;
+  }
+
+  .chip-high {
+    background: #FFEDD5 !important;
+    color: #9A3412 !important;
+    border: 1px solid #FB923C !important;
+    font-weight: 700 !important;
+  }
+
+  .chip-medium {
+    background: #FEF3C7 !important;
+    color: #92400E !important;
+    border: 1px solid #FCD34D !important;
+    font-weight: 700 !important;
+  }
+
+  .chip-low {
+    background: #E0F2FE !important;
+    color: #075985 !important;
+    border: 1px solid #38BDF8 !important;
+    font-weight: 700 !important;
+  }
+}
