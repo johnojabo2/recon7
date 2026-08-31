@@ -197,13 +197,28 @@ Open `http://localhost:5173` in your browser. On first launch, the **Root Setup 
 
 ---
 
-## 🐳 Docker Production Deployment
+## 🐳 Interactive Deployment Wizard (Docker & Local Network)
 
-Recon7 includes a production-ready `docker-compose.yml` orchestrating PostgreSQL, FastAPI Backend, Celery/Python Worker, and Nginx Alpine Frontend.
+Recon7 includes an interactive deployment wizard that prompts for your network parameters, configures frontend build arguments (`VITE_API_URL`), generates `.env` credentials, and launches all containerized services automatically.
 
+### On Linux / macOS / WSL:
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+### On Windows PowerShell:
+```powershell
+.\install.ps1
+```
+
+> 💡 **Why Build Arguments Are Crucial for Remote & LAN Access:**  
+> Single Page Applications (React Vite) execute inside the client's browser. When deploying across a LAN, VPN, or public IP, client browsers cannot resolve internal container names (e.g. `http://r7-api:8000`). The interactive installer configures `VITE_API_URL` to `/api` (relative Nginx proxy) or your public API endpoint so the web console connects seamlessly across any network.
+
+### Manual Docker Compose Deployment:
 ```bash
 # Build and launch all containerized services in detached mode
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### Services Containerized:
