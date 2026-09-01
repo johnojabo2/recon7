@@ -78,7 +78,13 @@ def verify_password(password: str, stored_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, tenant_id: str, email: str, role: str = "operator") -> str:
+def create_access_token(
+    user_id: str,
+    tenant_id: str,
+    email: str,
+    role: str = "operator",
+    token_version: int = 1,
+) -> str:
     """
     Generates an HMAC-SHA256 signed bearer token with expiration.
     Structure: base64(header).base64(payload).base64(signature)
@@ -90,6 +96,7 @@ def create_access_token(user_id: str, tenant_id: str, email: str, role: str = "o
         "tenant_id": tenant_id,
         "email": email,
         "role": role,
+        "token_version": token_version,
         "iat": now,
         "exp": now + TOKEN_EXPIRATION_SECONDS,
     }

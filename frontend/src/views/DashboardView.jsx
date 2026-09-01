@@ -246,7 +246,7 @@ export default function DashboardView({ onOpenNewScan, onSelectScan, onSelectTab
                           <>
                             <span>•</span>
                             <span className="text-success-green font-semibold">
-                              ⏱️ {formatScanDuration(scan.created_at, scan.completed_at)}
+                              {formatScanDuration(scan.created_at, scan.completed_at)}
                             </span>
                           </>
                         )}
@@ -254,7 +254,7 @@ export default function DashboardView({ onOpenNewScan, onSelectScan, onSelectTab
                           <>
                             <span>•</span>
                             <span className="text-cyan-signal font-semibold animate-pulse">
-                              ⏱️ {formatScanDuration(scan.created_at, null)}
+                              {formatScanDuration(scan.created_at, null)}
                             </span>
                           </>
                         )}
@@ -448,7 +448,7 @@ function AllScansModal({ onClose, onSelectScan }) {
                         <>
                           <span>•</span>
                           <span className="text-success-green">
-                            ⏱️ {formatScanDuration(scan.created_at, scan.completed_at)}
+                            {formatScanDuration(scan.created_at, scan.completed_at)}
                           </span>
                         </>
                       )}

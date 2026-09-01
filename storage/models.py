@@ -12,6 +12,7 @@ from sqlalchemy import (
     Float,
     JSON,
     Boolean,
+    Integer,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -52,6 +53,7 @@ class User(Base):
     role = Column(String(50), default="operator", nullable=False)
     allowed_tenants = Column(JSON, default=list, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    token_version = Column(Integer, default=1, nullable=False)
     created_by = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 

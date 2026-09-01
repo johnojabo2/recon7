@@ -19,9 +19,10 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
+  app:
+    image: johnojabo1/recon7:latest
     build: .
-    container_name: r7-api
+    container_name: r7-app
     restart: unless-stopped
     depends_on:
       postgres:
@@ -29,11 +30,15 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:reconpassword123@postgres:5432/recon7
       ALLOW_ALL_SCOPES_DEV: ${ALLOW_ALL_SCOPES_DEV:-false}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GOOGLE_SEARCH_API_KEY: ${GOOGLE_SEARCH_API_KEY:-}
+      GOOGLE_SEARCH_ENGINE_ID: ${GOOGLE_SEARCH_ENGINE_ID:-}
     ports:
       - "8000:8000"
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   worker:
+    image: johnojabo1/recon7:latest
     build: .
     container_name: r7-worker
     restart: unless-stopped
@@ -43,21 +48,10 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:reconpassword123@postgres:5432/recon7
       ALLOW_ALL_SCOPES_DEV: ${ALLOW_ALL_SCOPES_DEV:-false}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GOOGLE_SEARCH_API_KEY: ${GOOGLE_SEARCH_API_KEY:-}
+      GOOGLE_SEARCH_ENGINE_ID: ${GOOGLE_SEARCH_ENGINE_ID:-}
     command: python worker.py
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
-    container_name: r7-frontend
-    restart: unless-stopped
-    depends_on:
-      - api
-    ports:
-      - "5173:80"
-      - "80:80"
 
 volumes:
   postgres_data:

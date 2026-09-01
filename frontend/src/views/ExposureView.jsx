@@ -192,14 +192,30 @@ export default function ExposureView({ scanId }) {
 
       {/* 3. Breach Exposure Signals */}
       <div className="space-y-3">
-        <h3 className="text-sm font-mono font-semibold uppercase tracking-wider text-text-dim flex items-center gap-2">
-          <AlertOctagon className="w-4 h-4 text-pink-400" />
-          Legitimate Breach Exposure Intelligence
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h3 className="text-sm font-mono font-semibold uppercase tracking-wider text-text-dim flex items-center gap-2">
+            <AlertOctagon className="w-4 h-4 text-pink-400" />
+            Public Credential Exposure Signals
+          </h3>
+          <a
+            href="https://haveibeenpwned.com/DomainSearch"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] font-mono text-cyan-signal hover:underline flex items-center gap-1 self-start"
+            title="Verify enterprise domain exposure on HaveIBeenPwned"
+          >
+            <span>HaveIBeenPwned Domain Verification</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+        <div className="p-3.5 rounded-lg bg-panel-elevated border border-border-dim text-xs font-mono text-text-dim leading-relaxed">
+          <span className="text-text-primary font-bold">Methodology & Zero-Dump Policy:</span> Breach correlation verifies whether corporate email addresses appear in public compromise indices. Recon7 strictly adheres to defensive intelligence standards and <strong>never</strong> hosts, downloads, or stores stolen credentials or password dump files.
+        </div>
 
         {breaches.length === 0 ? (
           <div className="p-6 rounded-lg bg-panel border border-border-dim text-xs font-mono text-text-dim">
-            Zero breach exposure signals identified in authoritative defensive indices.
+            Zero breach exposure signals identified. No corporate email addresses from this domain were found in verified public leak registries.
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3">
@@ -220,14 +236,31 @@ export default function ExposureView({ scanId }) {
                   </div>
                   <div className="text-xs font-mono text-text-dim space-y-1">
                     <div>
-                      Masked Identifier: <strong className="text-text-primary select-all">{props.masked_identifier}</strong>
+                      Masked Identifier: <strong className="text-text-primary select-all">{props.masked_identifier || props.email || 'Corporate Account'}</strong>
                     </div>
-                    <div>Source: {props.source || 'Defensive Threat Intel'}</div>
+                    <div>Source: {props.source || 'Verified Threat Intelligence Feed'}</div>
+                    {props.breach_date && <div>Breach Date: {props.breach_date}</div>}
+                    {props.evidence && <div className="text-text-dim/80 pt-1">{props.evidence}</div>}
                     {props.remediation && (
                       <div className="text-cyan-signal pt-1">
                         <strong>Remediation:</strong> {props.remediation}
                       </div>
                     )}
+                  </div>
+                  <div className="flex items-center justify-between pt-2.5 border-t border-border-dim/60 text-[11px] font-mono">
+                    <span className="text-text-dim uppercase tracking-wider text-[10px]">Verification Link:</span>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href="https://haveibeenpwned.com/DomainSearch"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-cyan-signal hover:underline flex items-center gap-1 font-bold"
+                        title="Verify domain exposure on HaveIBeenPwned"
+                      >
+                        <span>HaveIBeenPwned Domain Search</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   </div>
                 </div>
               );

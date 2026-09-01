@@ -139,8 +139,9 @@ source venv/bin/activate
 # On Windows PowerShell:
 .\venv\Scripts\Activate.ps1
 
-# Install required Python dependencies
+# Install required Python dependencies & build Frontend
 pip install -r requirements.txt
+cd frontend && npm install && npm run build && cd ..
 ```
 
 ---
@@ -165,67 +166,70 @@ ALLOW_ALL_SCOPES_DEV=True
 
 # Zero-Trust Local Threat Triage Configuration
 AI_ENABLED=True
-ALLOW_ALL_SCOPES_DEV=True
 ```
 
 ---
 
-### 3. Launch Backend Server & Async Pipeline Worker
+### 3. Launching Services (Only 2 Terminals Needed!)
 
-In Terminal 1 (API Server):
+In Terminal 1 (Unified Web Console & API Server):
 ```bash
 python main.py
 ```
-*The FastAPI server starts on `http://127.0.0.1:8080`. API Documentation (Swagger) is live at `http://127.0.0.1:8080/docs`.*
+*Serves **both** the React Web Console UI and the FastAPI REST/WebSocket API at `http://127.0.0.1:8080`. API Swagger Docs are live at `http://127.0.0.1:8080/docs`.*
 
 In Terminal 2 (Pipeline Worker):
 ```bash
 python worker.py
 ```
+*Background worker daemon starts listening for reconnaissance scan jobs and executing the 10-step DAG.*
+
+> 💡 **Optional Frontend Dev Mode:** If you are actively modifying React code and want instant hot-module reloading, run `npm run dev` in `frontend/` (`http://localhost:5173`).
 
 ---
 
-### 4. Launch Frontend Web Console
+## 🐳 Docker Deployment (Bundled Monolith)
 
-In Terminal 3:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open `http://localhost:5173` in your browser. On first launch, the **Root Setup Wizard** will guide you to create your initial Master Administrator account.
+Recon7 compiles both the React Web Console and FastAPI REST/WebSocket backend into a single unified container (`johnojabo1/recon7:latest`), connecting to an external or containerized PostgreSQL database.
 
----
+### 1. Interactive Deployment Wizard (Recommended):
 
-## 🐳 Interactive Deployment Wizard (Docker & Local Network)
-
-Recon7 includes an interactive deployment wizard that prompts for your network parameters, configures frontend build arguments (`VITE_API_URL`), generates `.env` credentials, and launches all containerized services automatically.
-
-### On Linux / macOS / WSL:
+#### On Linux / macOS / WSL:
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### On Windows PowerShell:
+#### On Windows PowerShell:
 ```powershell
 .\install.ps1
 ```
 
-> 💡 **Why Build Arguments Are Crucial for Remote & LAN Access:**  
-> Single Page Applications (React Vite) execute inside the client's browser. When deploying across a LAN, VPN, or public IP, client browsers cannot resolve internal container names (e.g. `http://r7-api:8000`). The interactive installer configures `VITE_API_URL` to `/api` (relative Nginx proxy) or your public API endpoint so the web console connects seamlessly across any network.
+> 💡 **Production Tip:** Press **ENTER** on every prompt to accept the optimal production defaults (PostgreSQL volume persistence, strict legal scope gate).
 
-### Manual Docker Compose Deployment:
+---
+
+### 2. Single-Command Standalone Run (Official Image):
 ```bash
-# Build and launch all containerized services in detached mode
+# Run unified Recon7 container against an external PostgreSQL database
+docker run -d -p 8000:8000 \
+  -e DATABASE_URL=postgresql://postgres:password@YOUR_POSTGRES_HOST:5432/recon7 \
+  -e ALLOW_ALL_SCOPES_DEV=false \
+  johnojabo1/recon7:latest
+```
+
+---
+
+### 3. Docker Compose Multi-Service Stack:
+```bash
+# Build and launch complete stack (App + Worker + PostgreSQL)
 docker compose up -d --build
 ```
 
 ### Services Containerized:
-* `r7-postgres`: PostgreSQL 16 Alpine database container with volume persistence.
-* `r7-api`: FastAPI REST backend server listening on port `8000`.
-* `r7-worker`: Python async reconnaissance pipeline DAG worker.
-* `r7-frontend`: Multi-stage Nginx Alpine container serving the React single-page application on ports `80` and `5173`.
+* `r7-postgres`: PostgreSQL 16 Alpine database container with volume persistence (`postgres_data`).
+* `r7-app`: Unified Recon7 container (`johnojabo1/recon7:latest`) serving both the React Web Console and FastAPI REST/WebSocket API on port `8000`.
+* `r7-worker`: Python async reconnaissance pipeline DAG worker (`johnojabo1/recon7:latest`).
 
 ---
 

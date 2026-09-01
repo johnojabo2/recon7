@@ -36,6 +36,17 @@ function ConsoleLayout({ children, onOpenNewScan, activeTab, onSelectTab }) {
             <div className="max-w-7xl mx-auto">{children}</div>
           </main>
         </div>
+        <footer className="h-7 border-t border-border-dim bg-panel px-4 flex items-center justify-between text-[10px] font-mono text-text-dim select-none shrink-0 z-30">
+          <div className="flex items-center gap-2 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-signal/80 shrink-0"></span>
+            <span className="truncate">Authorized Scope Assessment Mode • Passive OSINT & Non-Destructive Probing Only</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-3 shrink-0">
+            <span>CFAA & GDPR Compliant</span>
+            <span>•</span>
+            <span>Ojabo Organization</span>
+          </div>
+        </footer>
       </div>
     </ProtectedRoute>
   );
@@ -47,7 +58,9 @@ export default function App() {
 
   const [selectedScanId, setSelectedScanId] = useState(null);
   const [scopeModalOpen, setScopeModalOpen] = useState(false);
-  const { activeTarget, setActiveTarget } = useTenant();
+  const { activeTarget, activeScanId, selectTarget } = useTenant();
+
+  const currentScanId = activeScanId || selectedScanId;
 
   // Check if system has been initialized
   const { data: setupStatus, isLoading: setupLoading, refetch: refetchSetup } = useQuery({
@@ -70,18 +83,18 @@ export default function App() {
 
   const handleScanCreated = (scanId, targetDomain) => {
     setSelectedScanId(scanId);
-    setActiveTarget(targetDomain);
+    selectTarget(targetDomain, scanId);
     navigate(`/scans/${scanId}`);
   };
 
   const handleSelectScan = (scanId, targetDomain) => {
     setSelectedScanId(scanId);
-    setActiveTarget(targetDomain);
+    selectTarget(targetDomain, scanId);
     navigate(`/scans/${scanId}`);
   };
 
   const handleInitiateScanFromLanding = (targetDomain) => {
-    setActiveTarget(targetDomain);
+    selectTarget(targetDomain, null);
     navigate('/dashboard');
     setScopeModalOpen(true);
   };
@@ -169,7 +182,7 @@ export default function App() {
               onSelectTab={handleSelectTab}
             >
               <ScanDetailView
-                scanId={selectedScanId}
+                scanId={currentScanId}
                 onSelectTab={handleSelectTab}
               />
             </ConsoleLayout>
@@ -184,7 +197,7 @@ export default function App() {
               onSelectTab={handleSelectTab}
             >
               <ScanDetailView
-                scanId={selectedScanId}
+                scanId={currentScanId}
                 onSelectTab={handleSelectTab}
               />
             </ConsoleLayout>
@@ -201,7 +214,7 @@ export default function App() {
               onSelectTab={handleSelectTab}
             >
               <FindingsView
-                scanId={selectedScanId}
+                scanId={currentScanId}
                 onSelectTab={handleSelectTab}
               />
             </ConsoleLayout>
@@ -216,7 +229,7 @@ export default function App() {
               onSelectTab={handleSelectTab}
             >
               <FindingsView
-                scanId={selectedScanId}
+                scanId={currentScanId}
                 onSelectTab={handleSelectTab}
               />
             </ConsoleLayout>
@@ -232,7 +245,7 @@ export default function App() {
               activeTab="people"
               onSelectTab={handleSelectTab}
             >
-              <PeopleView scanId={selectedScanId} />
+              <PeopleView scanId={currentScanId} />
             </ConsoleLayout>
           }
         />
@@ -244,7 +257,7 @@ export default function App() {
               activeTab="people"
               onSelectTab={handleSelectTab}
             >
-              <PeopleView scanId={selectedScanId} />
+              <PeopleView scanId={currentScanId} />
             </ConsoleLayout>
           }
         />
@@ -258,7 +271,7 @@ export default function App() {
               activeTab="reports"
               onSelectTab={handleSelectTab}
             >
-              <ReportView scanId={selectedScanId} />
+              <ReportView scanId={currentScanId} />
             </ConsoleLayout>
           }
         />
@@ -270,7 +283,7 @@ export default function App() {
               activeTab="reports"
               onSelectTab={handleSelectTab}
             >
-              <ReportView />
+              <ReportView scanId={currentScanId} />
             </ConsoleLayout>
           }
         />

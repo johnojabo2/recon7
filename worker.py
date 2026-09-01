@@ -49,11 +49,14 @@ from people.breach_correlator import correlate_email_breach_signals
 from ai.triage import triage_findings
 from ai.report_writer import generate_engagement_report
 
+log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+    level=log_level,
+    format="%(asctime)s [%(levelname)-7s] [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("r7.worker")
+logger.setLevel(log_level)
 
 PIPELINE_STEPS = [
     "1.company_resolve",

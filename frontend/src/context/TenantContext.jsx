@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../api/client';
 
@@ -6,17 +6,51 @@ const TenantContext = createContext(null);
 
 export function TenantProvider({ children }) {
   const queryClient = useQueryClient();
-  const [tenantId, setTenantId] = useState(() => {
+  const [tenantId, setTenantIdState] = useState(() => {
     return localStorage.getItem('r7_tenant_id') || 'dev-default-tenant';
   });
 
-  const [activeTarget, setActiveTarget] = useState(null);
+  const [activeTarget, setActiveTargetState] = useState(() => {
+    return localStorage.getItem('r7_active_target') || null;
+  });
+
+  const [activeScanId, setActiveScanIdState] = useState(() => {
+    return localStorage.getItem('r7_active_scan_id') || null;
+  });
+
+  const selectTarget = useCallback((targetDomain, scanId = null) => {
+    setActiveTargetState(targetDomain || null);
+    setActiveScanIdState(scanId || null);
+    if (targetDomain) {
+      localStorage.setItem('r7_active_target', targetDomain);
+    } else {
+      localStorage.removeItem('r7_active_target');
+    }
+    if (scanId) {
+      localStorage.setItem('r7_active_scan_id', scanId);
+    } else {
+      localStorage.removeItem('r7_active_scan_id');
+    }
+  }, []);
+
+  const setActiveTarget = useCallback((targetDomain) => {
+    selectTarget(targetDomain, null);
+  }, [selectTarget]);
+
+  const setActiveScanId = useCallback((scanId) => {
+    setActiveScanIdState(scanId || null);
+    if (scanId) {
+      localStorage.setItem('r7_active_scan_id', scanId);
+    } else {
+      localStorage.removeItem('r7_active_scan_id');
+    }
+  }, []);
 
   const updateTenant = async (id) => {
     if (!id) return;
-    setTenantId(id);
+    setTenantIdState(id);
     localStorage.setItem('r7_tenant_id', id);
-    setActiveTarget(null);
+    selectTarget(null, null);
 
     // Persist active tenant switch in backend if authenticated
     try {
@@ -31,15 +65,24 @@ export function TenantProvider({ children }) {
       console.warn('Backend tenant switch notification:', e);
     }
 
-    // Clear and refetch query cache so all views immediately switch to the new workspace!
+    // Invalidate queries so all views immediately refetch with the new workspace ID
     try {
-      queryClient.clear();
       queryClient.invalidateQueries();
     } catch (e) {}
   };
 
   return (
-    <TenantContext.Provider value={{ tenantId, setTenantId: updateTenant, activeTarget, setActiveTarget }}>
+    <TenantContext.Provider
+      value={{
+        tenantId,
+        setTenantId: updateTenant,
+        activeTarget,
+        setActiveTarget,
+        activeScanId,
+        setActiveScanId,
+        selectTarget,
+      }}
+    >
       {children}
     </TenantContext.Provider>
   );
@@ -52,3 +95,4 @@ export function useTenant() {
   }
   return context;
 }
+

@@ -1,72 +1,94 @@
 import logging
-import hashlib
+import os
 import re
 from typing import List, Dict, Any, Optional, Set
 import httpx
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
-def check_hibp_password_hash_exposure(sha1_hash_prefix: str, timeout: int = 5) -> int:
-    """
-    Checks k-Anonymity HIBP Pwned Passwords API (Section 19).
-    Queries first 5 characters of SHA-1 hash to preserve zero-knowledge privacy.
-    Returns breach prevalence count.
-    """
-    if len(sha1_hash_prefix) != 5:
-        return 0
-
-    url = f"https://api.pwnedpasswords.com/range/{sha1_hash_prefix.upper()}"
-    try:
-        with httpx.Client(timeout=timeout, verify=False) as client:
-            resp = client.get(url, headers={"User-Agent": "Recon7-BreachCorrelator/1.0"})
-            if resp.status_code == 200:
-                # Count total matching hash suffixes
-                return len(resp.text.splitlines())
-    except Exception:
-        pass
-    return 0
+def mask_email(email: str) -> str:
+    """Masks email for privacy (e.g. jo***bo@target.com)."""
+    if "@" not in email:
+        return "***"
+    user_part, domain_part = email.split("@", 1)
+    if len(user_part) <= 2:
+        masked_user = user_part[0] + "*"
+    else:
+        masked_user = user_part[:2] + "*" * (len(user_part) - 3) + user_part[-1]
+    return f"{masked_user}@{domain_part}"
 
 
 def correlate_email_breach_signals(
     emails: List[str],
-    timeout: int = 6,
+    timeout: int = 8,
 ) -> List[Dict[str, Any]]:
     """
-    Native SpiderFoot-inspired Breach & Leak Correlator (sfp_haveibeenpwned / sfp_scylla / sfp_leaklookup).
-    Correlates employee emails with known historical data leaks and credential dumps.
-    Returns list of breach telemetry records.
+    Correlates employee emails with verified data breach indices.
+    Requires an official HIBP API Key (HIBP_API_KEY).
+    If no key is configured, zero speculative alarms are generated.
     """
     if not emails:
         return []
 
-    logger.info(f"[people.breach] Checking breach and leak exposure signals for {len(emails)} corporate emails...")
+    hibp_key = getattr(settings, "HIBP_API_KEY", None) or os.getenv("HIBP_API_KEY")
+    if not hibp_key:
+        logger.info("[people.breach] No HIBP_API_KEY configured. Skipping active breach lookup. (Verify manually at haveibeenpwned.com/DomainSearch)")
+        return []
+
+    logger.info(f"[people.breach] Checking verified HaveIBeenPwned breach feeds for {len(emails)} corporate emails...")
 
     breach_findings: List[Dict[str, Any]] = []
     seen = set()
 
-    for raw_email in emails:
-        clean_email = raw_email.strip().lower()
-        if not clean_email or "@" not in clean_email or clean_email in seen:
-            continue
-        seen.add(clean_email)
+    headers = {
+        "hibp-api-key": hibp_key.strip(),
+        "user-agent": "Recon7-SecurityPlatform/1.0",
+    }
 
-        # Check k-anonymity SHA-1 hash range for the email representation
-        email_sha1 = hashlib.sha1(clean_email.encode("utf-8")).hexdigest().upper()
-        prefix = email_sha1[:5]
+    with httpx.Client(timeout=timeout, headers=headers) as client:
+        for raw_email in emails[:25]:  # Throttle to avoid rate limits
+            clean_email = raw_email.strip().lower()
+            if not clean_email or "@" not in clean_email or clean_email in seen:
+                continue
+            seen.add(clean_email)
 
-        count = check_hibp_password_hash_exposure(prefix, timeout=timeout)
-        if count > 0:
-            breach_findings.append({
-                "email": clean_email,
-                "breach_name": "Historical Public Credential / Comb Leak",
-                "risk_score": 85 if count > 10 else 65,
-                "confidence": 0.85 if count > 10 else 0.65,
-                "data_classes": ["Email Address", "Password Hashes / Credentials"],
-                "pwn_count": count,
-                "evidence": f"k-Anonymity SHA-1 prefix {prefix} matched {count} leaked hashes in global credential archives",
-                "is_verified": True,
-            })
+            url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{clean_email}?truncateResponse=false"
+            try:
+                resp = client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for item in data:
+                        breach_name = item.get("Name") or item.get("Title") or "Historical Data Breach"
+                        breach_date = item.get("BreachDate") or "Unknown"
+                        data_classes = item.get("DataClasses") or ["Email Address"]
+                        pwn_count = item.get("PwnCount", 0)
 
-    logger.info(f"[people.breach] Correlated {len(breach_findings)} corporate breach exposure signals")
+                        breach_findings.append({
+                            "email": clean_email,
+                            "masked_identifier": mask_email(clean_email),
+                            "breach_name": breach_name,
+                            "breach_date": breach_date,
+                            "risk_score": 80,
+                            "confidence": 0.95,
+                            "data_classes": data_classes,
+                            "pwn_count": pwn_count,
+                            "source": "HaveIBeenPwned Verified Breach Registry",
+                            "evidence": f"Email {mask_email(clean_email)} surfaced in verified {breach_name} breach ({breach_date}) containing: {', '.join(data_classes[:4])}",
+                            "remediation": "Audit account for credential reuse, enforce mandatory MFA, and rotate associated API tokens.",
+                            "is_verified": True,
+                        })
+                elif resp.status_code == 404:
+                    # Not found in any breach
+                    continue
+                elif resp.status_code == 429:
+                    logger.warning("[people.breach] HIBP API rate limit reached (429).")
+                    break
+            except Exception as e:
+                logger.debug(f"[people.breach] Failed HIBP lookup for {mask_email(clean_email)}: {e}")
+                continue
+
+    logger.info(f"[people.breach] Correlated {len(breach_findings)} verified breach records")
     return breach_findings

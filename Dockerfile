@@ -1,3 +1,17 @@
+# ==========================================
+# Stage 1: Build React Frontend
+# ==========================================
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci --silent || npm install --silent
+COPY frontend/ ./
+RUN npm run build
+
+# ==========================================
+# Stage 2: Production Python Backend + Bundled Frontend
+# ==========================================
 FROM python:3.11-slim
 
 # Prevent interactive prompts
@@ -38,10 +52,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
+# Copy backend source code
 COPY . .
+
+# Copy compiled frontend assets from Stage 1 into /app/frontend/dist
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 EXPOSE 8000
 
-# Default entrypoint starts the API server
+# Default entrypoint starts the API + UI bundled server
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

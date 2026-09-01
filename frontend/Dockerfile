@@ -41,4 +41,5 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://127.0.0.1/ || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+# Container startup script injecting dynamic runtime environment variables into window.ENV
+CMD ["/bin/sh", "-c", "echo \"window.ENV = { VITE_API_URL: \\\"${VITE_API_URL:-${BACKEND_URL:-/api}}\\\" };\" > /usr/share/nginx/html/env-config.js && exec nginx -g 'daemon off;'"]

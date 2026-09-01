@@ -99,7 +99,7 @@ export default function IamManagementView() {
     return (
       <EmptyState
         title="Access Restricted"
-        message="Enterprise IAM and Operator Access Control is restricted to System Administrators."
+        message="User and access management is restricted to System Administrators."
       />
     );
   }
@@ -425,7 +425,7 @@ function ProvisionOperatorModal({ tenants, onClose, onSubmit, isLoading, error }
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="operator@enterprise.com"
+              placeholder="user@example.com"
               className="w-full px-3 py-2 rounded bg-void border border-border-dim focus:border-cyan-signal text-text-primary outline-none"
             />
           </div>
@@ -607,7 +607,7 @@ function EditPermissionsModal({ user, currentUser, tenants, onClose, onSubmit, i
             </select>
             {isSelf && (
               <p className="text-[10px] text-amber-400 mt-1 font-mono">
-                🛡️ Self-demotion locked: You cannot revoke your own Administrator role to prevent lockout.
+                Self-demotion locked: You cannot revoke your own Administrator role to prevent lockout.
               </p>
             )}
           </div>

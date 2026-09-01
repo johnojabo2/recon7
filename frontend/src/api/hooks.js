@@ -23,7 +23,10 @@ export function useCreateTenant() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => apiRequest('/tenants', { method: 'POST', body: data }),
-    onSuccess: () => {
+    onSuccess: (newTenant) => {
+      if (newTenant && newTenant.id) {
+        queryClient.setQueryData(['tenants'], (old = []) => [newTenant, ...old]);
+      }
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
@@ -42,7 +45,10 @@ export function useRegisterScope() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data) => apiRequest('/scopes', { method: 'POST', body: data, tenantId }),
-    onSuccess: () => {
+    onSuccess: (newScope) => {
+      if (newScope && newScope.id) {
+        queryClient.setQueryData(['scopes', tenantId], (old = []) => [newScope, ...old]);
+      }
       queryClient.invalidateQueries({ queryKey: ['scopes', tenantId] });
     },
   });

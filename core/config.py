@@ -11,9 +11,10 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
     # Security & Authentication
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "r7-defense-grade-cyber-reconnaissance-secret-key-2026")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "r7-enterprise-reconnaissance-secret-key-2026")
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./recon7.db")

@@ -73,6 +73,7 @@ def init_db():
         "ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)",
         "ALTER TABLE users ADD COLUMN allowed_tenants JSON DEFAULT '[]'",
         "ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1",
+        "ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1",
         "ALTER TABLE users ADD COLUMN created_by VARCHAR(255)",
     ]
     with engine.connect() as conn:
@@ -274,6 +275,7 @@ def update_iam_user(
         user.is_active = is_active
     if password_hash is not None:
         user.password_hash = password_hash
+        user.token_version = (user.token_version or 1) + 1
     if tenant_id is not None:
         user.tenant_id = tenant_id
     db.commit()

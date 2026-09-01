@@ -1,6 +1,7 @@
 # ==============================================================================
 # RECON7 — DEFENSE-GRADE INTERACTIVE DEPLOYMENT WIZARD (Windows PowerShell)
 # Ojabo Organization • Attack Surface Intelligence Platform
+# Docker Repository: johnojabo1/recon7
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -12,11 +13,11 @@ Write-Host "  ██╔══██╗██╔══╝  ██║     ██�
 Write-Host "  ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║   ██║  " -ForegroundColor Cyan
 Write-Host "  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝  " -ForegroundColor Cyan
 Write-Host ""
-Write-Host "DEFENSE-GRADE INTERACTIVE DEPLOYMENT WIZARD" -ForegroundColor Yellow
+Write-Host "ENTERPRISE DEPLOYMENT WIZARD" -ForegroundColor Yellow
 Write-Host "--------------------------------------------------------"
-Write-Host "This installer will configure environment build arguments,"
-Write-Host "generate secure production credentials, build container images,"
-Write-Host "and deploy the Recon7 stack using Docker Compose."
+Write-Host "This installer configures your environment credentials, builds"
+Write-Host "the unified Recon7 container (johnojabo1/recon7), and deploys"
+Write-Host "the complete stack (Web Console + API + Worker + PostgreSQL)."
 Write-Host ""
 
 # 1. Verify Docker CLI availability
@@ -25,51 +26,40 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-# 2. Interactive Frontend API Base URL
-Write-Host "[Step 1/5] Frontend API Base URL Configuration" -ForegroundColor Cyan
-Write-Host "Single Page Applications (Vite React) execute inside the client's browser."
-Write-Host "If accessing Recon7 across a LAN, VPN, or public Internet, the browser cannot reach container names (e.g. r7-api)."
-Write-Host ""
-Write-Host "Options:"
-Write-Host " 1) /api  (Recommended: Relative Nginx proxy — works automatically across LAN & Domain IP)"
-Write-Host " 2) http://YOUR_SERVER_IP:8000 (Direct IP access)"
-Write-Host " 3) https://api.yourdomain.com (Custom public domain)"
-Write-Host ""
-
-$inputApiUrl = Read-Host "Enter API Base URL [default: /api]"
-$viteApiUrl = if ([string]::IsNullOrWhiteSpace($inputApiUrl)) { "/api" } else { $inputApiUrl }
-Write-Host "✓ Frontend API URL set to: $viteApiUrl" -ForegroundColor Green
-Write-Host ""
-
-# 3. Database Password
-Write-Host "[Step 2/5] Database Security Credentials" -ForegroundColor Cyan
-$inputDbPass = Read-Host "Enter PostgreSQL password [default: reconpassword123]"
+# 2. Database Password
+Write-Host "[Step 1/4] Database Security Credentials" -ForegroundColor Cyan
+Write-Host "Tip: Press ENTER to use default password ('reconpassword123')." -ForegroundColor Yellow
+$inputDbPass = Read-Host "Enter PostgreSQL password [Press ENTER for default]"
 $postgresPassword = if ([string]::IsNullOrWhiteSpace($inputDbPass)) { "reconpassword123" } else { $inputDbPass }
-Write-Host "✓ Database password configured." -ForegroundColor Green
+Write-Host "Database password configured." -ForegroundColor Green
 Write-Host ""
 
-# 4. Environment Mode & Dev Scope Bypass
-Write-Host "[Step 3/5] Environment & Authorization Gate Settings" -ForegroundColor Cyan
-$inputScopeDev = Read-Host "Allow dev scope bypass? (true/false) [default: false]"
+# 3. Environment Mode & Dev Scope Bypass
+Write-Host "[Step 2/4] Scope Authorization Settings" -ForegroundColor Cyan
+Write-Host "Tip: Press ENTER to keep strict production security ('false')." -ForegroundColor Yellow
+Write-Host "Setting to 'true' bypasses target pre-approval for rapid local dev testing."
+$inputScopeDev = Read-Host "Allow dev scope bypass? (true/false) [Press ENTER for default 'false']"
 $allowAllScopesDev = if ([string]::IsNullOrWhiteSpace($inputScopeDev)) { "false" } else { $inputScopeDev }
-Write-Host "✓ Scope Bypass set to: $allowAllScopesDev" -ForegroundColor Green
+Write-Host "Scope Bypass set to: $allowAllScopesDev" -ForegroundColor Green
 Write-Host ""
 
-# 5. Optional Integrations Credentials
-Write-Host "[Step 4/5] Optional OSINT Credentials (Press ENTER to skip)" -ForegroundColor Cyan
-$githubToken = Read-Host "GitHub Personal Access Token (for 5,000 req/hr quota)"
-$googleApiKey = Read-Host "Google Search API Key"
-$googleEngineId = Read-Host "Google Search Engine ID (CX)"
+# 4. Optional Integrations Credentials
+Write-Host "[Step 3/4] Optional External API Keys" -ForegroundColor Cyan
+Write-Host "Tip: If you do not have API keys right now, press ENTER on each prompt to skip." -ForegroundColor Yellow
+Write-Host "Recon7 runs core features out of the box using free passive sources without API keys."
+Write-Host ""
+$githubToken = Read-Host "GitHub Token (Optional - Press ENTER to skip)"
+$googleApiKey = Read-Host "Google Search API Key (Optional - Press ENTER to skip)"
+$googleEngineId = Read-Host "Google Search Engine ID (Optional - Press ENTER to skip)"
 Write-Host ""
 
 # Write .env file
-Write-Host "[Step 5/5] Generating .env configuration and launching containers..." -ForegroundColor Cyan
+Write-Host "[Step 4/4] Generating .env configuration and launching containers..." -ForegroundColor Cyan
 
 $envContent = @"
 # Auto-generated by Recon7 Installation Wizard
 ENVIRONMENT=production
 DEBUG=False
-VITE_API_URL=$viteApiUrl
 
 # Database Configuration
 POSTGRES_DB=recon7
@@ -91,9 +81,8 @@ Write-Host "✓ Configuration saved to .env" -ForegroundColor Green
 Write-Host ""
 
 # Build & Deploy Containers
-Write-Host "Building Docker images and starting services..." -ForegroundColor Yellow
-$env:VITE_API_URL = $viteApiUrl
-docker compose build --build-arg VITE_API_URL=$viteApiUrl
+Write-Host "Building unified Docker image (johnojabo1/recon7) and starting services..." -ForegroundColor Yellow
+docker compose build
 docker compose up -d
 
 Write-Host ""
@@ -102,9 +91,9 @@ Write-Host "  RECON7 PLATFORM DEPLOYED SUCCESSFULLY! " -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Operational Endpoints:"
-Write-Host " - Web Console UI:   http://localhost:5173 (or http://SERVER_IP)"
-Write-Host " - REST API Server:  http://localhost:8000 (or $viteApiUrl)"
-Write-Host " - Swagger Docs:     http://localhost:8000/docs"
+Write-Host " - Web Console UI:   http://localhost:8000 (or http://YOUR_SERVER_IP:8000)"
+Write-Host " - REST API & Docs:  http://localhost:8000/docs"
+Write-Host " - Health Status:    http://localhost:8000/health"
 Write-Host ""
 Write-Host "To monitor container logs: docker compose logs -f"
 Write-Host "To stop containers:        docker compose down"

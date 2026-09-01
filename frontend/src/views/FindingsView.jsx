@@ -24,22 +24,36 @@ import {
   HelpCircle,
   ArrowRight,
 } from 'lucide-react';
-import { useScanFindings, useDashboard } from '../api/hooks';
+import { useScanFindings, useDashboard, useScansList } from '../api/hooks';
+import { useTenant } from '../context/TenantContext';
 import SeverityBadge from '../components/SeverityBadge';
 import { LoadingState, EmptyState } from '../components/LoadingState';
 import AiDisclaimer from '../components/AiDisclaimer';
 
 export default function FindingsView({ scanId, onSelectTab }) {
   const { scanId: routeScanId } = useParams();
-  const effectiveScanId = scanId || routeScanId;
+  const { activeTarget, activeScanId } = useTenant();
+  const { data: scans = [] } = useScansList(100);
+  const { data: dashboard } = useDashboard();
+
   const [selectedTab, setSelectedTab] = useState('all');
   const [selectedSeverity, setSelectedSeverity] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [inspectFinding, setInspectFinding] = useState(null);
   const [copySuccess, setCopySuccess] = useState('');
 
-  const { data: dashboard } = useDashboard();
-  const recentJobId = effectiveScanId || dashboard?.recent_scans?.[0]?.id;
+  const targetMatchedScan = activeTarget
+    ? scans.find((s) => s.target_domain === activeTarget)
+    : null;
+
+  const recentJobId =
+    routeScanId ||
+    scanId ||
+    activeScanId ||
+    targetMatchedScan?.id ||
+    dashboard?.recent_scans?.[0]?.id ||
+    scans[0]?.id;
+
   const { data: rawFindings = [], isLoading } = useScanFindings(recentJobId);
   const baseFindings = Array.isArray(rawFindings) ? rawFindings : [];
 

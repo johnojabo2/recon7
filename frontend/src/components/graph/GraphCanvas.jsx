@@ -52,6 +52,9 @@ export default function GraphCanvas({
   onSelectNode,
   isExpanding = false,
   expandedNodeIds = new Set(),
+  pathNodeIds = null,
+  pathEdgeIds = null,
+  pathNodes = [],
 }) {
   const containerRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -115,6 +118,21 @@ export default function GraphCanvas({
     setZoom(effectiveZoom);
     setPan({ x: panX, y: panY });
   }, []);
+
+  // Auto-focus directly on traced path nodes when a path is discovered
+  useEffect(() => {
+    if (pathNodeIds && pathNodeIds.size > 0 && Object.keys(nodePositionsRef.current).length > 0) {
+      const pathPositions = {};
+      pathNodeIds.forEach((id) => {
+        if (nodePositionsRef.current[id]) {
+          pathPositions[id] = nodePositionsRef.current[id];
+        }
+      });
+      if (Object.keys(pathPositions).length > 0) {
+        fitGraphToViewport(pathPositions);
+      }
+    }
+  }, [pathNodeIds, fitGraphToViewport]);
 
   // Smooth Zooming centered around the viewport midpoint
   const handleZoom = useCallback((delta) => {
@@ -688,6 +706,19 @@ export default function GraphCanvas({
             <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#06b6d4" fillOpacity="0.8" />
           </marker>
 
+          {/* High-Contrast Path Glowing Marker */}
+          <marker
+            id="graph-arrow-path"
+            viewBox="0 0 10 10"
+            refX="22"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 1 L 9 5 L 0 9 z" fill="#06b6d4" />
+          </marker>
+
           {/* Generate Clip Paths for all image nodes */}
           {nodes.map((node) => {
             const cfg = ENTITY_CONFIG[node.type] || ENTITY_CONFIG.default;
@@ -708,6 +739,9 @@ export default function GraphCanvas({
             if (!srcPos || !tgtPos) return null;
 
             const isHovered = hoveredEdgeId === edge.id;
+            const isInPath = pathEdgeIds?.has(edge.id);
+            const isDimmed = pathEdgeIds && !isInPath;
+
             const midX = (srcPos.x + tgtPos.x) / 2;
             const midY = (srcPos.y + tgtPos.y) / 2;
             const hasEvidence = (edge.supporting_evidence_ids || []).length > 0;
@@ -723,6 +757,7 @@ export default function GraphCanvas({
               <g
                 key={edge.id}
                 className="cursor-pointer group"
+                style={{ opacity: isDimmed ? 0.12 : 1, transition: 'opacity 0.3s ease' }}
                 onMouseEnter={() => setHoveredEdgeId(edge.id)}
                 onMouseLeave={() => setHoveredEdgeId(null)}
                 onClick={() => {
@@ -735,10 +770,11 @@ export default function GraphCanvas({
                 <path
                   d={`M ${srcPos.x} ${srcPos.y} Q ${ctrlX} ${ctrlY} ${tgtPos.x} ${tgtPos.y}`}
                   fill="none"
-                  stroke={isHovered ? '#06b6d4' : '#334155'}
-                  strokeWidth={isHovered ? 2.5 : 1.5}
+                  stroke={isInPath ? '#06b6d4' : isHovered ? '#06b6d4' : '#334155'}
+                  strokeWidth={isInPath ? 3.5 : isHovered ? 2.5 : 1.5}
                   strokeDasharray={edge.status === 'possible_match' ? '4,4' : 'none'}
-                  markerEnd="url(#graph-arrow)"
+                  markerEnd={isInPath ? 'url(#graph-arrow-path)' : 'url(#graph-arrow)'}
+                  filter={isInPath ? 'url(#glow-cyan)' : 'none'}
                   className="transition-colors duration-200"
                 />
 
@@ -750,18 +786,18 @@ export default function GraphCanvas({
                     width={relText.length * 7 + 16}
                     height="18"
                     rx="9"
-                    fill="#0a0e17"
-                    stroke={isHovered ? '#06b6d4' : '#1e293b'}
-                    strokeWidth="1"
+                    fill={isInPath ? '#042f2e' : '#0a0e17'}
+                    stroke={isInPath ? '#06b6d4' : isHovered ? '#06b6d4' : '#1e293b'}
+                    strokeWidth={isInPath ? '1.5' : '1'}
                     className="transition-colors"
                   />
                   <text
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fill={isHovered ? '#06b6d4' : '#94a3b8'}
-                    fontSize="8.5"
+                    fill={isInPath ? '#22d3ee' : isHovered ? '#06b6d4' : '#94a3b8'}
+                    fontSize={isInPath ? '9' : '8.5'}
                     fontFamily="monospace"
-                    fontWeight="600"
+                    fontWeight={isInPath ? '700' : '600'}
                   >
                     {relText}
                   </text>
@@ -779,6 +815,12 @@ export default function GraphCanvas({
 
             const cfg = ENTITY_CONFIG[node.type] || ENTITY_CONFIG.default;
             const isSelected = selectedNodeId === node.id;
+            const isInPath = pathNodeIds?.has(node.id);
+            const isDimmed = pathNodeIds && !isInPath;
+            const pathIndex = pathNodes ? pathNodes.findIndex((n) => n.id === node.id) : -1;
+            const isStart = pathIndex === 0;
+            const isEnd = pathIndex === (pathNodes.length - 1);
+
             const radius = cfg.radius || 18;
             const imageUrl = getNodeImageUrl(node);
             const hasLinkedIn = (node.properties?.profile_url || '')
@@ -790,10 +832,19 @@ export default function GraphCanvas({
               node.label.length > 17 ? `${node.label.slice(0, 15)}…` : node.label;
             const pillWidth = Math.min(displayLabel.length * 6.6, 115) + 12;
 
+            const accentColor = isInPath
+              ? isStart
+                ? '#10b981'
+                : isEnd
+                ? '#a855f7'
+                : '#06b6d4'
+              : cfg.color;
+
             return (
               <g
                 key={node.id}
                 transform={`translate(${pos.x}, ${pos.y})`}
+                style={{ opacity: isDimmed ? 0.15 : 1, transition: 'opacity 0.3s ease' }}
                 className={`cursor-grab active:cursor-grabbing group ${
                   draggedNodeId === node.id ? 'cursor-grabbing' : ''
                 }`}
@@ -805,17 +856,44 @@ export default function GraphCanvas({
                   }
                 }}
               >
-                {/* Outer Glow on selection */}
-                {isSelected && (
+                {/* Step / Hop Badge Pill for Traced Path */}
+                {pathIndex !== -1 && (
+                  <g transform={`translate(0, ${-(radius + 15)})`}>
+                    <rect
+                      x="-22"
+                      y="-8"
+                      width="44"
+                      height="16"
+                      rx="8"
+                      fill={accentColor}
+                      stroke="#020408"
+                      strokeWidth="1.5"
+                      filter="url(#glow-cyan)"
+                    />
+                    <text
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="#000000"
+                      fontSize="8"
+                      fontFamily="monospace"
+                      fontWeight="900"
+                    >
+                      {isStart ? 'ORIGIN' : isEnd ? 'TARGET' : `HOP ${pathIndex}`}
+                    </text>
+                  </g>
+                )}
+
+                {/* Outer Glow on selection or Path inclusion */}
+                {(isSelected || isInPath) && (
                   <circle
-                    r={radius + 8}
+                    r={radius + (isInPath ? 9 : 8)}
                     fill="none"
-                    stroke={cfg.color}
-                    strokeWidth="2"
-                    strokeOpacity="0.8"
+                    stroke={accentColor}
+                    strokeWidth={isInPath ? 2.5 : 2}
+                    strokeOpacity={isInPath ? 0.95 : 0.8}
                     strokeDasharray="4,4"
                     className="animate-spin"
-                    style={{ animationDuration: '8s' }}
+                    style={{ animationDuration: isInPath ? '6s' : '8s' }}
                   />
                 )}
 
@@ -823,20 +901,20 @@ export default function GraphCanvas({
                 <circle
                   r={radius}
                   fill="#0a0e17"
-                  stroke={cfg.color}
-                  strokeWidth={isSelected ? 3 : 2}
+                  stroke={accentColor}
+                  strokeWidth={isInPath ? 3.5 : isSelected ? 3 : 2}
                   className="transition-transform group-hover:scale-110 duration-150"
-                  filter={isSelected ? 'url(#glow-cyan)' : 'none'}
+                  filter={isSelected || isInPath ? 'url(#glow-cyan)' : 'none'}
                 />
 
                 {/* Inner Icon Pill Fallback */}
-                <circle r={radius - 2} fill={cfg.color} fillOpacity="0.18" />
+                <circle r={radius - 2} fill={accentColor} fillOpacity="0.18" />
 
                 {/* Node Center Label Abbr (Fallback) */}
                 <text
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fill={cfg.color}
+                  fill={accentColor}
                   fontSize="9.5"
                   fontFamily="monospace"
                   fontWeight="bold"
@@ -891,18 +969,18 @@ export default function GraphCanvas({
                     width={pillWidth}
                     height="16"
                     rx="4"
-                    fill="#030712"
-                    fillOpacity="0.90"
-                    stroke="#1e293b"
-                    strokeWidth="0.8"
+                    fill={isInPath ? '#022c22' : '#030712'}
+                    fillOpacity="0.95"
+                    stroke={isInPath ? accentColor : '#1e293b'}
+                    strokeWidth={isInPath ? 1.5 : 0.8}
                   />
                   <text
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fill="#e2e8f0"
+                    fill={isInPath ? '#ffffff' : '#e2e8f0'}
                     fontSize="9.5"
                     fontFamily="monospace"
-                    fontWeight="500"
+                    fontWeight={isInPath ? '700' : '500'}
                     className="pointer-events-none select-none"
                   >
                     {displayLabel}

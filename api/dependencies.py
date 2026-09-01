@@ -40,6 +40,16 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Token Version Check (Immediate session invalidation on password reset)
+    token_ver = claims.get("token_version")
+    user_ver = getattr(user, "token_version", 1) or 1
+    if token_ver is not None and token_ver != user_ver:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been revoked due to a password reset. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -174,6 +174,16 @@ export default function GraphView({ scanId }) {
     }
   };
 
+  const pathNodeIds = useMemo(() => {
+    if (!pathResult?.found || !pathResult.nodes) return null;
+    return new Set(pathResult.nodes.map((n) => n.id));
+  }, [pathResult]);
+
+  const pathEdgeIds = useMemo(() => {
+    if (!pathResult?.found || !pathResult.edges) return null;
+    return new Set(pathResult.edges.map((e) => e.id));
+  }, [pathResult]);
+
   const handleClearPath = () => {
     setPathResult(null);
     setPathError(null);
@@ -192,9 +202,9 @@ export default function GraphView({ scanId }) {
             Graph Lens:
           </span>
           {[
-            { id: 'executive', label: '👔 Executive & OSINT', desc: 'CEO, Leads, Leaked Docs, Org Hierarchy' },
-            { id: 'attack_surface', label: '🎯 Tactical Attack Surface', desc: 'Origin Servers, Subdomains, Critical Vulns' },
-            { id: 'composite', label: '🌐 Composite Map', desc: 'Balanced Full Infrastructure & Personnel View' },
+            { id: 'executive', label: 'Executive & Personnel', desc: 'Leadership, Leads, Leaked Docs, Org Hierarchy' },
+            { id: 'attack_surface', label: 'Tactical Attack Surface', desc: 'Origin Servers, Subdomains, Critical Vulns' },
+            { id: 'composite', label: 'Composite Infrastructure', desc: 'Balanced Full Infrastructure & Personnel View' },
           ].map((lens) => {
             const isActive = activeLens === lens.id;
             return (
@@ -257,7 +267,7 @@ export default function GraphView({ scanId }) {
           })}
         </div>
 
-        {/* Controls: Path Tracer Toggle, Confidence Slider, Search */}
+        {/* Controls: Path Tracer Toggle, Search */}
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           <button
             onClick={() => setShowPathFinder((prev) => !prev)}
@@ -287,14 +297,17 @@ export default function GraphView({ scanId }) {
 
       {/* Path Finder Expansion Bar */}
       {showPathFinder && (
-        <div className="p-4 rounded-lg bg-void/90 border border-cyan-signal/30 shadow-panel space-y-3">
+        <div className="p-4 rounded-lg bg-void/95 border border-cyan-signal/40 shadow-panel space-y-3.5 animate-fadeIn">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-mono text-cyan-signal font-semibold uppercase tracking-wider">
-              <Route className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-xs font-mono text-cyan-signal font-bold uppercase tracking-wider">
+              <Route className="w-4 h-4 text-cyan-signal" />
               <span>Evidence-Backed Path Finding</span>
             </div>
             <button
-              onClick={() => setShowPathFinder(false)}
+              onClick={() => {
+                setShowPathFinder(false);
+                handleClearPath();
+              }}
               className="p-1 rounded hover:bg-panel text-text-dim hover:text-text-primary"
             >
               <X className="w-4 h-4" />
@@ -340,20 +353,54 @@ export default function GraphView({ scanId }) {
           </div>
 
           {pathResult?.found && (
-            <div className="p-3 rounded bg-panel border border-success-green/40 text-xs font-mono space-y-1.5">
-              <div className="text-success-green font-bold flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Verified Pivot Chain Discovered ({pathResult.path_length} hops):</span>
+            <div className="p-3.5 rounded-lg bg-panel border border-cyan-signal/40 text-xs font-mono space-y-2.5 shadow-panel animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div className="text-cyan-signal font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-success-green" />
+                  <span>Verified Pivot Chain Discovered ({pathResult.path_length} hops):</span>
+                </div>
+                <button
+                  onClick={handleClearPath}
+                  className="text-[11px] text-text-dim hover:text-text-primary px-2.5 py-1 rounded bg-void border border-border-dim hover:border-cyan-signal/40 transition-colors"
+                >
+                  Clear Highlight
+                </button>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-text-primary">
-                {pathResult.node_chain?.map((n, i) => (
-                  <React.Fragment key={n.id}>
-                    <span className="px-2 py-0.5 rounded bg-void border border-border-dim text-[11px]">
-                      {n.label}
-                    </span>
-                    {i < pathResult.node_chain.length - 1 && <span className="text-cyan-signal">➔</span>}
-                  </React.Fragment>
-                ))}
+
+              {/* Step-by-Step Interactive Breadcrumb Route */}
+              <div className="flex flex-wrap items-center gap-2 p-2.5 rounded bg-void/90 border border-border-dim">
+                {pathResult.nodes?.map((n, i) => {
+                  const edge = pathResult.edges?.[i];
+                  const isOrigin = i === 0;
+                  const isDestination = i === (pathResult.nodes.length - 1);
+                  return (
+                    <React.Fragment key={n.id}>
+                      <button
+                        onClick={() => setSelectedNodeId(n.id)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-2 transition-all ${
+                          selectedNodeId === n.id
+                            ? 'bg-cyan-signal text-black border-cyan-signal shadow-glow-cyan font-bold scale-105'
+                            : isOrigin
+                            ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 hover:brightness-125'
+                            : isDestination
+                            ? 'bg-purple-500/15 border-purple-500/50 text-purple-300 hover:brightness-125'
+                            : 'bg-panel text-text-primary border-border-dim hover:border-cyan-signal/60'
+                        }`}
+                        title="Click to inspect this pivot node on canvas"
+                      >
+                        <span className={`w-2 h-2 rounded-full ${isOrigin ? 'bg-emerald-400' : isDestination ? 'bg-purple-400' : 'bg-cyan-signal'}`} />
+                        <span className="font-bold">{n.label}</span>
+                      </button>
+
+                      {edge && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-cyan-signal font-mono uppercase bg-cyan-signal/10 px-2 py-0.5 rounded border border-cyan-signal/30">
+                          <span>{edge.type.replace(/_/g, ' ')}</span>
+                          <span className="text-cyan-bright font-bold">➔</span>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -376,6 +423,9 @@ export default function GraphView({ scanId }) {
         onExpandNode={handleExpandNode}
         isExpanding={isExpanding}
         expandedNodeIds={expandedNodeIds}
+        pathNodeIds={pathNodeIds}
+        pathEdgeIds={pathEdgeIds}
+        pathNodes={pathResult?.nodes || []}
       />
 
       {/* Slide-Out Drawer 1: Evidence Inspection */}

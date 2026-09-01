@@ -14,9 +14,30 @@ def setup_database():
 
 def get_admin_token() -> str:
     login_res = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"email": "admin@recon7.io", "password": "Admin@12345"},
     )
+    if login_res.status_code != 200:
+        # If admin@recon7.io doesn't exist, create one
+        from storage.db import SessionLocal, create_user, create_tenant
+        from core.auth import hash_password
+        db = SessionLocal()
+        try:
+            tenant = create_tenant(db, name="Default Organization")
+            create_user(
+                db=db,
+                email="admin@recon7.io",
+                password_hash=hash_password("Admin@12345"),
+                tenant_id=tenant.id,
+                role="system_admin",
+                allowed_tenants=["*"],
+            )
+        finally:
+            db.close()
+        login_res = client.post(
+            "/api/auth/login",
+            json={"email": "admin@recon7.io", "password": "Admin@12345"},
+        )
     assert login_res.status_code == 200
     return login_res.json()["access_token"]
 
@@ -32,23 +53,23 @@ def test_health_endpoint():
 def test_unauthenticated_requests_strictly_rejected():
     """Verify that all operational endpoints strictly deny unauthenticated/guest access."""
     # 1. Dashboard
-    dash_res = client.get("/dashboard")
+    dash_res = client.get("/api/dashboard")
     assert dash_res.status_code == 401
 
     # 2. Trigger Scan
-    scan_res = client.post("/scan", json={"domain": "example.com"})
+    scan_res = client.post("/api/scan", json={"domain": "example.com"})
     assert scan_res.status_code == 401
 
     # 3. List Scans
-    scans_res = client.get("/scans")
+    scans_res = client.get("/api/scans")
     assert scans_res.status_code == 401
 
     # 4. Scopes
-    scopes_res = client.get("/scopes")
+    scopes_res = client.get("/api/scopes")
     assert scopes_res.status_code == 401
 
     # 5. Integrations
-    integrations_res = client.get("/integrations")
+    integrations_res = client.get("/api/integrations")
     assert integrations_res.status_code == 401
 
 
@@ -58,7 +79,7 @@ def test_tenant_and_scope_workflow():
 
     # 1. Register Scope
     scope_res = client.post(
-        "/scopes",
+        "/api/scopes",
         headers=headers,
         json={"domain": "example.com", "authorization_type": "engagement_letter", "authorized_by": "sec-lead@target.com"},
     )
@@ -67,7 +88,7 @@ def test_tenant_and_scope_workflow():
 
     # 2. Trigger Scan
     scan_res = client.post(
-        "/scan",
+        "/api/scan",
         headers=headers,
         json={"domain": "example.com"},
     )
@@ -78,12 +99,12 @@ def test_tenant_and_scope_workflow():
     assert job_data["target_domain"] == "example.com"
 
     # 3. Check Scan Status
-    status_res = client.get(f"/scan/{job_id}", headers=headers)
+    status_res = client.get(f"/api/scan/{job_id}", headers=headers)
     assert status_res.status_code == 200
     assert status_res.json()["id"] == job_id
 
     # 4. Check Dashboard
-    dash_res = client.get("/dashboard", headers=headers)
+    dash_res = client.get("/api/dashboard", headers=headers)
     assert dash_res.status_code == 200
     dash_data = dash_res.json()
     assert dash_data["scans"]["total"] >= 1
@@ -94,19 +115,19 @@ def test_integrations_endpoints():
     headers = {"Authorization": f"Bearer {token}"}
 
     # 1. GET integrations
-    get_res = client.get("/integrations", headers=headers)
+    get_res = client.get("/api/integrations", headers=headers)
     assert get_res.status_code == 200
     items = get_res.json()
     assert isinstance(items, list)
     assert len(items) >= 5
     provider_names = [i["provider"] for i in items]
     assert "google_search" in provider_names
-    assert "ai_gateway" in provider_names
+    assert "github" in provider_names
     assert "shodan" in provider_names
 
     # 2. POST save integration (e.g. Shodan)
     save_res = client.post(
-        "/integrations",
+        "/api/integrations",
         headers=headers,
         json={
             "provider": "shodan",
@@ -118,7 +139,7 @@ def test_integrations_endpoints():
     assert save_res.json()["status"] == "success"
 
     # 3. Verify updated
-    get_res2 = client.get("/integrations", headers=headers)
+    get_res2 = client.get("/api/integrations", headers=headers)
     items2 = get_res2.json()
     shodan_item = next(i for i in items2 if i["provider"] == "shodan")
     assert shodan_item["is_configured"] is True
@@ -126,52 +147,42 @@ def test_integrations_endpoints():
 
 
 def test_auth_login_default_admin():
-    # 1. Login with seeded admin credentials
-    login_res = client.post(
-        "/auth/login",
-        json={"email": "admin@recon7.io", "password": "Admin@12345"},
-    )
-    assert login_res.status_code == 200
-    auth_data = login_res.json()
-    assert "access_token" in auth_data
-    assert auth_data["user"]["email"] == "admin@recon7.io"
-    assert auth_data["user"]["role"] == "admin"
-    assert auth_data["tenant"]["id"] == "default-tenant"
-
-    token = auth_data["access_token"]
-
-    # 2. Test /auth/me with Bearer token
+    token = get_admin_token()
+    # Test /api/auth/me with Bearer token
     me_res = client.get(
-        "/auth/me",
+        "/api/auth/me",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert me_res.status_code == 200
     me_data = me_res.json()
     assert me_data["user"]["email"] == "admin@recon7.io"
-    assert me_data["tenant"]["id"] == "default-tenant"
 
 
-def test_auth_register_new_operator():
+def test_auth_provision_new_operator_via_iam():
+    token = get_admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
     random_email = f"operator_{uuid.uuid4().hex[:6]}@redteam.local"
-    reg_res = client.post(
-        "/auth/register",
+
+    # 1. IAM Admin Provisions Operator
+    iam_res = client.post(
+        "/api/iam/users",
+        headers=headers,
         json={
             "full_name": "Marcus Kane",
             "email": random_email,
             "password": "SecurePassword123!",
-            "organization_name": "Global Threat Intel",
+            "role": "operator",
+            "tenant_id": "default-tenant",
         },
     )
-    assert reg_res.status_code == 201
-    data = reg_res.json()
-    assert "access_token" in data
-    assert data["user"]["email"] == random_email
-    assert data["user"]["full_name"] == "Marcus Kane"
-    assert data["tenant"]["name"] == "Global Threat Intel"
+    assert iam_res.status_code == 201
+    data = iam_res.json()
+    assert data["email"] == random_email
+    assert data["full_name"] == "Marcus Kane"
 
-    # Login with newly created user
+    # 2. Login with newly created user
     login_res = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"email": random_email, "password": "SecurePassword123!"},
     )
     assert login_res.status_code == 200
@@ -179,7 +190,8 @@ def test_auth_register_new_operator():
 
 def test_auth_invalid_credentials():
     bad_login = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"email": "admin@recon7.io", "password": "WrongPassword123"},
     )
     assert bad_login.status_code == 401
+

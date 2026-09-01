@@ -332,17 +332,24 @@ export default function ScopeGateModal({ isOpen, onClose, onScanCreated, initial
             </div>
           </div>
 
-          {/* Mandatory Checkbox Attestation */}
-          <div className="p-3 rounded bg-void border border-border-dim space-y-2">
-            <label className="flex items-start gap-3 cursor-pointer select-none">
+          {/* Mandatory Checkbox Attestation & Legal Disclaimer */}
+          <div className="p-3.5 rounded-lg bg-panel-elevated border border-border-dim space-y-2">
+            <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">
+              <AlertOctagon className="w-4 h-4 text-amber-400" />
+              <span>Legal Authorization & Compliance Mandate</span>
+            </div>
+            <p className="text-[11px] font-mono text-text-dim leading-relaxed">
+              Recon7 is an authorized security intelligence platform. All collectors execute non-destructive passive OSINT and non-invasive port probes. Initiating scans against unauthorized third-party infrastructure is strictly prohibited under the CFAA and international cyber legislation.
+            </p>
+            <label className="flex items-start gap-2.5 pt-1.5 border-t border-border-dim/60 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={attestationChecked}
                 onChange={(e) => setAttestationChecked(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded bg-panel border-border-dim text-cyan-signal focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                className="mt-0.5 w-4 h-4 rounded bg-panel border-border-dim text-cyan-signal focus:ring-0 cursor-pointer"
               />
-              <span className="text-xs text-text-primary leading-snug">
-                I formally confirm and attest that this target domain is in-scope for authorized red team operations.
+              <span className="text-xs text-text-primary font-semibold leading-snug">
+                I formally confirm and attest that I possess explicit written authorization to evaluate this target.
               </span>
             </label>
           </div>

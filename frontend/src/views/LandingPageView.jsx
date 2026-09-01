@@ -142,7 +142,7 @@ export default function LandingPageView({ onEnterConsole, onInitiateScan }) {
 
             <p className="text-text-dim text-sm sm:text-base leading-relaxed max-w-xl font-mono">
               Recon7 is an autonomous reconnaissance engine for authorized red team operations — subdomain discovery,
-              deep service scanning, and AI-prioritized findings, from one input.
+              deep service scanning, and attack surface mapping, from one input.
             </p>
 
             {/* Quick Target Launchpad Form */}

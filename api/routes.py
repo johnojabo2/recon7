@@ -281,10 +281,11 @@ def endpoint_setup_initialize(payload: SetupInitializeRequest, db: Session = Dep
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    if len(payload.password) < 8:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Master password must be at least 8 characters.")
+    try:
+        hashed_pw = hash_password(payload.password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    hashed_pw = hash_password(payload.password)
     admin_user, tenant = complete_initial_setup(
         db=db,
         email=clean_email,
@@ -298,6 +299,7 @@ def endpoint_setup_initialize(payload: SetupInitializeRequest, db: Session = Dep
         tenant_id=tenant.id,
         email=admin_user.email,
         role=admin_user.role,
+        token_version=getattr(admin_user, "token_version", 1) or 1,
     )
 
     return AuthResponse(
@@ -390,7 +392,13 @@ def endpoint_login(payload: LoginRequest, db: Session = Depends(get_db)):
         user.tenant_id = tenant.id
         db.commit()
 
-    token = create_access_token(user_id=user.id, tenant_id=tenant.id, email=user.email, role=user.role)
+    token = create_access_token(
+        user_id=user.id,
+        tenant_id=tenant.id,
+        email=user.email,
+        role=user.role,
+        token_version=getattr(user, "token_version", 1) or 1,
+    )
 
     allowed = user.allowed_tenants if isinstance(user.allowed_tenants, list) else (["*"] if user.role == "system_admin" else [user.tenant_id])
 
@@ -459,7 +467,13 @@ def endpoint_switch_tenant(
     current_user.tenant_id = tenant.id
     db.commit()
 
-    token = create_access_token(user_id=current_user.id, tenant_id=tenant.id, email=current_user.email, role=current_user.role)
+    token = create_access_token(
+        user_id=current_user.id,
+        tenant_id=tenant.id,
+        email=current_user.email,
+        role=current_user.role,
+        token_version=getattr(current_user, "token_version", 1) or 1,
+    )
 
     return {
         "status": "success",
@@ -511,9 +525,6 @@ def endpoint_iam_create_user(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    if len(payload.password) < 8:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters.")
-
     existing = get_user_by_email(db, clean_email)
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A user with this email already exists.")
@@ -522,7 +533,11 @@ def endpoint_iam_create_user(
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Primary organization tenant '{payload.tenant_id}' not found.")
 
-    hashed_pw = hash_password(payload.password)
+    try:
+        hashed_pw = hash_password(payload.password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     user = create_user(
         db=db,
         email=clean_email,
@@ -628,10 +643,10 @@ def endpoint_iam_reset_password(
     admin: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ):
-    """Reset an operator's password (System Admins only)."""
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters.")
-    hashed_pw = hash_password(payload.new_password)
+    try:
+        hashed_pw = hash_password(payload.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     user = update_iam_user(db=db, user_id=user_id, password_hash=hashed_pw)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")

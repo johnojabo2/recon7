@@ -65,14 +65,14 @@ export default function AuthModal({ isOpen, onClose, onSuccess, pendingDomain = 
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-display font-bold text-sm tracking-wider text-text-primary uppercase">
-                  SECURITY ACCESS GATE
+                  OPERATOR SIGN IN
                 </span>
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-signal/10 border border-cyan-signal/40 text-cyan-signal font-mono font-bold">
-                  OPERATOR AUTH
+                  AUTH
                 </span>
               </div>
               <p className="text-[11px] font-mono text-text-dim">
-                {pendingDomain ? `Authorize access to scan ${pendingDomain}` : 'Enterprise Security Operations'}
+                {pendingDomain ? `Authorize access to scan ${pendingDomain}` : 'Enter credentials to access console'}
               </p>
             </div>
           </div>
@@ -97,14 +97,14 @@ export default function AuthModal({ isOpen, onClose, onSuccess, pendingDomain = 
           {/* Email */}
           <div className="space-y-1">
             <label className="block text-[11px] font-mono text-text-dim uppercase tracking-wider">
-              Operator Email Address <span className="text-cyan-signal">*</span>
+              Email Address <span className="text-cyan-signal">*</span>
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-text-dim absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="email"
                 required
-                placeholder="operator@enterprise.com"
+                placeholder="user@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 rounded-lg bg-void border border-border-dim focus:border-cyan-signal text-xs font-mono text-text-primary placeholder:text-text-dim/60 focus:outline-none transition-all"
@@ -116,7 +116,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, pendingDomain = 
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label className="block text-[11px] font-mono text-text-dim uppercase tracking-wider">
-                Operator Password <span className="text-cyan-signal">*</span>
+                Password <span className="text-cyan-signal">*</span>
               </label>
             </div>
             <div className="relative">
@@ -149,21 +149,21 @@ export default function AuthModal({ isOpen, onClose, onSuccess, pendingDomain = 
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>AUTHENTICATING CREDENTIALS...</span>
+                  <span>SIGNING IN...</span>
                 </>
               ) : (
                 <>
-                  <span>AUTHENTICATE OPERATOR</span>
+                  <span>SIGN IN</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </div>
 
-          {/* Enterprise IAM Advisory */}
+          {/* Access Policy Advisory */}
           <div className="text-center pt-3 border-t border-border-dim/60">
             <p className="text-[10px] font-mono text-text-dim leading-relaxed">
-              Enterprise Access Policy: Public registration is closed. Accounts are provisioned and managed by your Security Administrator via the IAM console.
+              Access Policy: Public registration is closed. Accounts are provisioned by your system administrator.
             </p>
           </div>
         </form>

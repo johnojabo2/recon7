@@ -115,3 +115,48 @@ def test_anti_lockout_self_demotion_defense():
     demote_resp = client.put(f"/api/iam/users/{admin.id}", json={"role": "auditor"}, headers=headers)
     assert demote_resp.status_code == 400
     assert "Self-demotion blocked" in demote_resp.json()["detail"]
+
+
+def test_password_reset_revokes_active_sessions():
+    """Verify resetting user password immediately revokes all prior active tokens across devices."""
+    from storage.db import update_iam_user
+    client = TestClient(app)
+    ts = int(time.time())
+    db = SessionLocal()
+    try:
+        tenant = create_tenant(db, name=f"Session Revoke Org {ts}")
+        user = create_user(
+            db=db,
+            email=f"operator_{ts}@revoke.local",
+            password_hash=hash_password("InitialSecurePass!2026"),
+            tenant_id=tenant.id,
+            role="operator",
+        )
+        user_id = user.id
+        user_email = user.email
+    finally:
+        db.close()
+
+    # 1. Login with initial password and obtain valid token
+    login_resp = client.post("/api/auth/login", json={"email": user_email, "password": "InitialSecurePass!2026"})
+    assert login_resp.status_code == 200
+    old_token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {old_token}"}
+
+    # Verify token works for /api/auth/me
+    me_resp = client.get("/api/auth/me", headers=headers)
+    assert me_resp.status_code == 200
+
+    # 2. Simulate password reset (e.g. from CLI or IAM admin reset)
+    db = SessionLocal()
+    try:
+        new_hashed = hash_password("NewChangedPassword!2026")
+        update_iam_user(db=db, user_id=user_id, password_hash=new_hashed)
+    finally:
+        db.close()
+
+    # 3. Old active token must now be rejected immediately with 401 Unauthorized
+    revoked_resp = client.get("/api/auth/me", headers=headers)
+    assert revoked_resp.status_code == 401
+    assert "Session has been revoked" in revoked_resp.json()["detail"]
+

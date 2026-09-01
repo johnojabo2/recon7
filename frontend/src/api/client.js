@@ -28,18 +28,42 @@ export async function apiRequest(endpoint, { method = 'GET', body = null, tenant
     config.body = JSON.stringify(body);
   }
 
-  // Ensure all API calls route through /api prefix to avoid collision with frontend page routes
-  const cleanEndpoint = endpoint.startsWith('/api') || endpoint.startsWith('http')
-    ? endpoint
-    : `/api${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const runtimeBaseUrl = window.ENV?.VITE_API_URL || window.ENV?.BACKEND_URL || import.meta.env.VITE_API_URL || '';
+  let fullUrl = endpoint;
+  if (endpoint.startsWith('http')) {
+    fullUrl = endpoint;
+  } else if (runtimeBaseUrl && runtimeBaseUrl !== '/api') {
+    const cleanBase = runtimeBaseUrl.replace(/\/$/, '');
+    const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    fullUrl = `${cleanBase}${cleanPath}`;
+  } else {
+    fullUrl = endpoint.startsWith('/api')
+      ? endpoint
+      : `/api${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  }
 
-  const response = await fetch(cleanEndpoint, config);
+  const response = await fetch(fullUrl, config);
 
   if (!response.ok) {
     let errorDetail = 'API request failed';
     try {
       const errData = await response.json();
-      errorDetail = errData.detail || errorDetail;
+      if (Array.isArray(errData.detail)) {
+        // FastAPI / Pydantic validation error array
+        errorDetail = errData.detail
+          .map((item) => {
+            const loc = item.loc ? item.loc[item.loc.length - 1] : '';
+            const msg = item.msg || item.message || JSON.stringify(item);
+            return loc ? `${loc}: ${msg}` : msg;
+          })
+          .join('. ');
+      } else if (typeof errData.detail === 'string') {
+        errorDetail = errData.detail;
+      } else if (typeof errData.message === 'string') {
+        errorDetail = errData.message;
+      } else if (errData.detail) {
+        errorDetail = JSON.stringify(errData.detail);
+      }
     } catch (_) {
       errorDetail = response.statusText || errorDetail;
     }

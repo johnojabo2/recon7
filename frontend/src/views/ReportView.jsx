@@ -15,6 +15,7 @@ import {
 import { marked } from 'marked';
 import html2pdf from 'html2pdf.js';
 import { useScanReport, useScanJob, useScanFindings, useScansList, useDashboard } from '../api/hooks';
+import { useTenant } from '../context/TenantContext';
 import { LoadingState, EmptyState } from '../components/LoadingState';
 import AiDisclaimer from '../components/AiDisclaimer';
 import { formatScanDuration, parseUtcDate } from './ScanDetailView';
@@ -51,6 +52,7 @@ function formatDate(dateStr) {
 export default function ReportView({ scanId }) {
   const { scanId: routeScanId } = useParams();
   const navigate = useNavigate();
+  const { activeTarget, activeScanId } = useTenant();
   const [selectedId, setSelectedId] = useState(null);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('executive'); // 'executive' | 'raw_markdown'
@@ -60,8 +62,19 @@ export default function ReportView({ scanId }) {
   const { data: dashboard } = useDashboard();
   const { data: scans = [], isLoading: scansLoading } = useScansList(100);
 
-  // Determine active scan ID: user selection -> route param -> prop -> most recent scan
-  const effectiveScanId = selectedId || routeScanId || scanId || dashboard?.recent_scans?.[0]?.id || scans[0]?.id;
+  const targetMatchedScan = activeTarget
+    ? scans.find((s) => s.target_domain === activeTarget)
+    : null;
+
+  // Determine active scan ID: user selection -> route param -> prop -> active target scan -> recent scan
+  const effectiveScanId =
+    selectedId ||
+    routeScanId ||
+    scanId ||
+    activeScanId ||
+    targetMatchedScan?.id ||
+    dashboard?.recent_scans?.[0]?.id ||
+    scans[0]?.id;
 
   const { data: job, isLoading: jobLoading } = useScanJob(effectiveScanId);
   const { data: findings = [], isLoading: findingsLoading } = useScanFindings(effectiveScanId);

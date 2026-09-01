@@ -94,6 +94,22 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const setSession = (data) => {
+    if (data?.access_token) {
+      setToken(data.access_token);
+      localStorage.setItem('r7_auth_token', data.access_token);
+      if (data.user) {
+        setUser(data.user);
+      }
+      if (data.tenant) {
+        setTenant(data.tenant);
+        if (data.tenant.id) {
+          localStorage.setItem('r7_tenant_id', data.tenant.id);
+        }
+      }
+    }
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -110,6 +126,7 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(user && token),
     login,
     register,
+    setSession,
     logout,
   };
 

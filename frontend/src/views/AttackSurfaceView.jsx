@@ -199,9 +199,9 @@ export default function AttackSurfaceView({
         {/* Perspective View Modes */}
         <div className="flex items-center gap-2">
           {[
-            { id: 'hosts', label: '🖥️ Host Cluster View', count: hostClusters.length },
-            { id: 'subdomains', label: '🌐 Subdomains Ledger', count: subdomains.length },
-            { id: 'vulns', label: '🛡️ Vulnerability Matrix', count: vulns.length },
+            { id: 'hosts', label: 'Host Clusters', count: hostClusters.length },
+            { id: 'subdomains', label: 'Subdomain Ledger', count: subdomains.length },
+            { id: 'vulns', label: 'Vulnerability Matrix', count: vulns.length },
           ].map((mode) => {
             const isActive = activeView === mode.id;
             return (

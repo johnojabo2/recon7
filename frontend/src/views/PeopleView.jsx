@@ -1,18 +1,32 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Users, Search, Mail, CheckCircle2, HelpCircle, ExternalLink, Globe, Github, Linkedin, Twitter, Filter, ShieldCheck, AlertCircle } from 'lucide-react';
-import { useScanFindings, useDashboard } from '../api/hooks';
+import { useScanFindings, useDashboard, useScansList } from '../api/hooks';
+import { useTenant } from '../context/TenantContext';
 import TechnicalData from '../components/TechnicalData';
 import { LoadingState, EmptyState } from '../components/LoadingState';
 
 export default function PeopleView({ scanId }) {
   const { scanId: routeScanId } = useParams();
-  const effectiveScanId = scanId || routeScanId;
+  const { activeTarget, activeScanId } = useTenant();
+  const { data: scans = [] } = useScansList(100);
+  const { data: dashboard } = useDashboard();
+
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState('ALL');
   const [deliverabilityFilter, setDeliverabilityFilter] = useState('ALL');
-  const { data: dashboard } = useDashboard();
-  const recentJobId = effectiveScanId || dashboard?.recent_scans?.[0]?.id;
+
+  const targetMatchedScan = activeTarget
+    ? scans.find((s) => s.target_domain === activeTarget)
+    : null;
+
+  const recentJobId =
+    routeScanId ||
+    scanId ||
+    activeScanId ||
+    targetMatchedScan?.id ||
+    dashboard?.recent_scans?.[0]?.id ||
+    scans[0]?.id;
 
   const { data: findings = [], isLoading } = useScanFindings(recentJobId, 'people');
 

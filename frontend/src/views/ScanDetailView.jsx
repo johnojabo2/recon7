@@ -32,7 +32,8 @@ import {
   TrendingUp,
   Ban,
 } from 'lucide-react';
-import { useScanJob, useScanFindings, useScanReport, useAbortScan } from '../api/hooks';
+import { useScanJob, useScanFindings, useScanReport, useAbortScan, useScansList, useDashboard } from '../api/hooks';
+import { useTenant } from '../context/TenantContext';
 import PipelineVisualizer from '../components/PipelineVisualizer';
 import SeverityBadge from '../components/SeverityBadge';
 import TechnicalData from '../components/TechnicalData';
@@ -132,7 +133,21 @@ function ScanTimerBadge({ job }) {
 export default function ScanDetailView({ scanId, onSelectTab }) {
   const navigate = useNavigate();
   const { scanId: routeScanId } = useParams();
-  const effectiveScanId = scanId || routeScanId;
+  const { activeTarget, activeScanId } = useTenant();
+  const { data: scans = [] } = useScansList(100);
+  const { data: dashboard } = useDashboard();
+
+  const targetMatchedScan = activeTarget
+    ? scans.find((s) => s.target_domain === activeTarget)
+    : null;
+
+  const effectiveScanId =
+    routeScanId ||
+    scanId ||
+    activeScanId ||
+    targetMatchedScan?.id ||
+    dashboard?.recent_scans?.[0]?.id ||
+    scans[0]?.id;
   const [activeTab, setActiveTab] = useState('whois');
   const [copiedText, setCopiedText] = useState(null);
   const [expandedProof, setExpandedProof] = useState({});
@@ -424,7 +439,7 @@ export default function ScanDetailView({ scanId, onSelectTab }) {
                   ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/40'
                   : 'bg-cyan-signal/10 text-cyan-signal border-cyan-signal/40'
               }`}>
-                {job.scan_profile === 'deep' ? '🔥 DEEP SCAN' : job.scan_profile === 'fast' ? '⚡ FAST SCAN' : '🎯 STANDARD RECON'}
+                {job.scan_profile === 'deep' ? 'DEEP RECON' : job.scan_profile === 'fast' ? 'FAST SCAN' : 'STANDARD RECON'}
               </span>
             )}
             <ScanTimerBadge job={job} />
@@ -1164,7 +1179,7 @@ export default function ScanDetailView({ scanId, onSelectTab }) {
                     </div>
                     {hostInventory.some(h => h.criticalCount > 0 || h.highCount > 0) && (
                       <span className="px-2 py-0.5 rounded bg-magenta-alert/15 text-magenta-alert border border-magenta-alert/40 text-[10px] font-bold self-start sm:self-center">
-                        ⚠️ {hostInventory.filter(h => h.criticalCount > 0 || h.highCount > 0).length} High-Risk Hosts Surfaced
+                        {hostInventory.filter(h => h.criticalCount > 0 || h.highCount > 0).length} High-Risk Hosts Surfaced
                       </span>
                     )}
                   </div>
