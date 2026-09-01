@@ -13,14 +13,11 @@ metadata:
   name: r7-config
   namespace: recon7
 data:
+  ENVIRONMENT: "production"
+  ALLOW_ALL_SCOPES_DEV: "false"
   LITELLM_MODEL: "claude-sonnet-4-5-20250929"
   SEARCH_CACHE_TTL_DAYS: "7"
-  MASSCAN_BIN: "/usr/bin/masscan"
-  NMAP_BIN: "/usr/bin/nmap"
-  SUBFINDER_BIN: "/usr/bin/subfinder"
-  HTTPX_BIN: "/usr/bin/httpx"
-  NUCLEI_BIN: "/usr/bin/nuclei"
-  ALLOW_ALL_SCOPES_DEV: "false"
+  GOOGLE_SEARCH_ENGINE_ID: ""
 
 ---
 apiVersion: v1
@@ -31,13 +28,9 @@ metadata:
 type: Opaque
 stringData:
   DATABASE_URL: "postgresql://postgres:reconpassword123@r7-postgres:5432/recon7"
-  JWT_SECRET: "r7-super-secret-key-change-me-in-production-min-32-chars-long"
-  ANTHROPIC_API_KEY: ""
-  OPENAI_API_KEY: ""
-  SERPAPI_API_KEY: ""
+  GOOGLE_SEARCH_API_KEY: ""
   GITHUB_TOKEN: ""
-  CENSYS_API_ID: ""
-  CENSYS_API_SECRET: ""
+
 
 ---
 apiVersion: v1
@@ -105,29 +98,30 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: r7-api
+  name: r7-app
   namespace: recon7
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: r7-api
+      app: r7-app
   template:
     metadata:
       labels:
-        app: r7-api
+        app: r7-app
     spec:
       containers:
-        - name: api
-          image: recon7/api:latest
-          imagePullPolicy: IfNotPresent
+        - name: app
+          image: johnojabo1/recon7:latest
+          imagePullPolicy: Always
+          command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
           envFrom:
             - configMapRef:
                 name: r7-config
             - secretRef:
                 name: r7-secrets
           ports:
-            - containerPort: 8080
+            - containerPort: 8000
           resources:
             requests:
               cpu: "250m"
@@ -138,13 +132,13 @@ spec:
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
 
@@ -152,14 +146,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: r7-api
+  name: r7-app
   namespace: recon7
 spec:
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8000
+      targetPort: 8000
   selector:
-    app: r7-api
+    app: r7-app
 
 ---
 apiVersion: apps/v1
@@ -168,7 +162,7 @@ metadata:
   name: r7-worker
   namespace: recon7
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: r7-worker
@@ -179,8 +173,8 @@ spec:
     spec:
       containers:
         - name: worker
-          image: recon7/worker:latest
-          imagePullPolicy: IfNotPresent
+          image: johnojabo1/recon7:latest
+          imagePullPolicy: Always
           command: ["python", "worker.py"]
           envFrom:
             - configMapRef:
@@ -194,49 +188,6 @@ spec:
             limits:
               cpu: "2000m"
               memory: "4Gi"
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: r7-frontend
-  namespace: recon7
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: r7-frontend
-  template:
-    metadata:
-      labels:
-        app: r7-frontend
-    spec:
-      containers:
-        - name: frontend
-          image: recon7/frontend:latest
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 80
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: r7-frontend
-  namespace: recon7
-spec:
-  ports:
-    - port: 80
-      targetPort: 80
-  selector:
-    app: r7-frontend
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -256,31 +207,10 @@ spec:
     - host: recon7.yourdomain.com
       http:
         paths:
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: r7-api
-                port:
-                  number: 8080
-          - path: /auth
-            pathType: Prefix
-            backend:
-              service:
-                name: r7-api
-                port:
-                  number: 8080
-          - path: /integrations
-            pathType: Prefix
-            backend:
-              service:
-                name: r7-api
-                port:
-                  number: 8080
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: r7-frontend
+                name: r7-app
                 port:
-                  number: 80
+                  number: 8000
