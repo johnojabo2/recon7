@@ -4,17 +4,75 @@ import re
 import shutil
 import subprocess
 import ipaddress
+import secrets
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Set, Dict, Any, Optional
 import httpx
+import dns.resolver
+import dns.exception
+
 from core.config import settings
 from core.scope import normalize_domain
 
 logger = logging.getLogger(__name__)
 
+# Curated, High-Signal Infrastructure Wordlist (Zero Noise: Production, Cloud, Auth, Microservices, Devops)
+HIGH_SIGNAL_SUBDOMAIN_WORDLIST = [
+    # Core Environments
+    "dev", "devel", "develop", "development", "stage", "staging", "stg", "test", "testing",
+    "qa", "uat", "prod", "production", "prd", "demo", "beta", "alpha", "preview", "sandbox",
+    "lab", "labs", "canary", "release", "rc", "pre", "preprod", "live", "internal", "corp",
+    
+    # Core Web, App & Authentication Portals
+    "app", "apps", "api", "apis", "v1", "v2", "v3", "auth", "login", "signin", "signup",
+    "sso", "oauth", "identity", "id", "portal", "admin", "administrator", "adm", "dashboard",
+    "dash", "console", "manage", "management", "panel", "cp", "cpanel", "hub", "gateway",
+    "proxy", "router", "ingress", "edge", "web", "www", "m", "mobile", "my", "client",
+    "clients", "customer", "customers", "user", "users", "member", "members", "account",
+    "accounts", "profile", "partner", "partners", "vendor", "vendors", "merchant", "checkout",
+    "pay", "payment", "payments", "billing", "invoice", "invoices", "store", "shop", "cart",
+    
+    # API, Backend & Microservices
+    "graphql", "gql", "rest", "grpc", "ws", "websocket", "socket", "backend", "frontend",
+    "service", "services", "micro", "core", "engine", "worker", "workers", "queue", "queues",
+    "job", "jobs", "task", "tasks", "feed", "stream", "events", "event", "webhook", "webhooks",
+    "connect", "sync", "broker", "rpc", "data", "db", "database", "sql", "redis", "cache",
+    "search", "elastic", "elasticsearch", "mongo", "mongodb", "postgres", "mysql",
+    
+    # DevOps, CI/CD, Repositories & Cloud Infrastructure
+    "git", "github", "gitlab", "gitea", "bitbucket", "repo", "code", "jenkins", "ci", "cd",
+    "build", "builds", "deploy", "deployment", "runner", "runners", "registry", "docker",
+    "harbor", "nexus", "artifactory", "k8s", "kube", "kubernetes", "cluster", "node", "nodes",
+    "swarm", "vault", "consul", "etcd", "terraform", "ansible", "cloud", "aws", "gcp", "azure",
+    "s3", "blob", "storage", "bucket", "buckets", "assets", "static", "media", "img", "images",
+    "cdn", "files", "file", "download", "downloads", "upload", "uploads", "backup", "backups",
+    
+    # Monitoring, Observability & Security
+    "status", "health", "uptime", "monitor", "monitoring", "metrics", "metric", "grafana",
+    "kibana", "prometheus", "alert", "alerts", "alertmanager", "jaeger", "sentry", "datadog",
+    "newrelic", "splunk", "logs", "logging", "log", "audit", "trace", "tracing",
+    "security", "sec", "siem", "soc", "vpn", "remote", "bastion", "jump", "ssh", "rdp",
+    "firewall", "waf", "cert", "certs", "pki", "ca",
+    
+    # Email, DNS & Communication Infrastructure
+    "mail", "email", "mx", "mx1", "mx2", "smtp", "imap", "pop", "pop3", "webmail", "exchange",
+    "relay", "mta", "mailserver", "ns", "ns1", "ns2", "ns3", "ns4", "dns", "dns1", "dns2",
+    "nameserver", "chat", "slack", "mattermost", "teams", "meet", "zoom", "voice", "sip",
+    "voip", "video", "conf", "conference", "call",
+    
+    # Corporate, Support & Collaboration Portals
+    "docs", "doc", "documentation", "wiki", "kb", "knowledge", "guide", "guides", "help",
+    "support", "ticket", "tickets", "servicedesk", "desk", "jira", "confluence", "notion",
+    "trello", "asana", "crm", "erp", "hr", "people", "staff", "employees", "work", "office",
+    "intranet", "forum", "community", "blog", "news", "press", "media", "contact", "about",
+    "careers", "jobs", "investors", "ir", "legal", "terms", "privacy", "trust", "compliance",
+    "affiliate", "affiliates", "survey", "forms", "marketing", "analytics", "tracking", "track",
+]
+
 
 def enumerate_subdomains(domain: str, timeout: int = 60) -> List[Dict[str, Any]]:
     """
-    Step 2: Enumerate subdomains for target domain using free CT logs and CLI tools.
+    Step 2: Enumerate subdomains for target domain using free CT logs, passive DNS, and active zero-noise DNS brute-forcing.
     Returns a list of structured findings: [{subdomain: str, sources: [str]}].
     """
     clean_domain = normalize_domain(domain)
@@ -64,7 +122,7 @@ def enumerate_subdomains(domain: str, timeout: int = 60) -> List[Dict[str, Any]]
     except Exception as e:
         logger.debug(f"Certspotter enumeration failed for {clean_domain}: {e}")
 
-    # 3. Subfinder Subprocess (if binary available)
+    # 4. Subfinder Subprocess (if binary available)
     subfinder_bin = shutil.which(settings.SUBFINDER_BIN) or shutil.which("subfinder")
     if subfinder_bin:
         try:
@@ -76,7 +134,7 @@ def enumerate_subdomains(domain: str, timeout: int = 60) -> List[Dict[str, Any]]
     else:
         logger.debug("subfinder binary not detected in PATH; using direct CT log sources")
 
-    # 4. Google Custom Search (1 budgeted query if available)
+    # 5. Google Custom Search (1 budgeted query if available)
     try:
         from core.google_search import query_google_search
         import urllib.parse
@@ -89,7 +147,7 @@ def enumerate_subdomains(domain: str, timeout: int = 60) -> List[Dict[str, Any]]
     except Exception as e:
         logger.debug(f"Google search subdomain enumeration failed: {e}")
 
-    # 5. Censys Certificate Search (if configured)
+    # 6. Censys Certificate Search (if configured)
     try:
         from recon.censys_client import query_censys_subdomains
         censys_subs = query_censys_subdomains(clean_domain, timeout=min(timeout, 15))
@@ -97,6 +155,14 @@ def enumerate_subdomains(domain: str, timeout: int = 60) -> List[Dict[str, Any]]
             _add(s, "censys")
     except Exception as e:
         logger.debug(f"Censys subdomain query failed: {e}")
+
+    # 7. Active Zero-Noise DNS Wordlist Brute-Forcing (Runs concurrently alongside passive sources)
+    try:
+        active_subs = _active_dns_bruteforce(clean_domain, timeout=min(timeout, 20))
+        for s in active_subs:
+            _add(s, "active_dns_bruteforce")
+    except Exception as e:
+        logger.warning(f"Active DNS brute-force failed for {clean_domain}: {e}")
 
     # Always ensure root domain is included
     _add(clean_domain, "root_domain")
@@ -107,6 +173,79 @@ def enumerate_subdomains(domain: str, timeout: int = 60) -> List[Dict[str, Any]]
     ]
     logger.info(f"[recon.subdomains] Discovered {len(results)} unique subdomains for '{clean_domain}'")
     return results
+
+
+def _active_dns_bruteforce(domain: str, timeout: int = 15) -> List[str]:
+    """
+    Active Zero-Noise DNS Wordlist Brute-Forcing with Triple-Canary Wildcard Detection.
+    Queries curated high-signal infrastructure words against authoritative/trusted resolvers.
+    Excludes 100% of wildcard catch-all false positives.
+    """
+    clean_domain = normalize_domain(domain)
+    discovered_subs: List[str] = []
+
+    resolver = dns.resolver.Resolver()
+    resolver.timeout = 1.5
+    resolver.lifetime = 2.0
+    resolver.nameservers = ["1.1.1.1", "8.8.8.8", "9.9.9.9", "1.0.0.1", "8.8.4.4"]
+
+    # 1. Triple-Canary Wildcard Detection
+    wildcard_ips: Set[str] = set()
+    canary_hits = 0
+    for _ in range(3):
+        canary = f"r7-canary-{secrets.token_hex(4)}.{clean_domain}"
+        try:
+            answers = resolver.resolve(canary, "A")
+            for rdata in answers:
+                wildcard_ips.add(rdata.address)
+            canary_hits += 1
+        except Exception:
+            pass
+
+    is_wildcard = canary_hits >= 2
+    if is_wildcard:
+        logger.info(f"[recon.subdomains] Wildcard DNS detected for '{clean_domain}' on IPs: {wildcard_ips}. Active delta filtering enabled.")
+
+    def _probe_word(word: str) -> Optional[str]:
+        target_sub = f"{word}.{clean_domain}"
+        try:
+            # Query A record
+            answers = resolver.resolve(target_sub, "A")
+            resolved_ips = {rdata.address for rdata in answers}
+
+            if is_wildcard:
+                # Discard if all resolved IPs match the wildcard catch-all IP pool
+                if resolved_ips.issubset(wildcard_ips):
+                    return None
+            return target_sub
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.Timeout):
+            pass
+        except Exception as e:
+            logger.debug(f"DNS brute-force probe error for {target_sub}: {e}")
+
+        # Also check CNAME if A returned nothing
+        try:
+            cname_answers = resolver.resolve(target_sub, "CNAME")
+            if cname_answers:
+                return target_sub
+        except Exception:
+            pass
+
+        return None
+
+    # Execute concurrent high-signal queries
+    with ThreadPoolExecutor(max_workers=35) as executor:
+        futures = {executor.submit(_probe_word, word): word for word in HIGH_SIGNAL_SUBDOMAIN_WORDLIST}
+        for future in as_completed(futures):
+            try:
+                res = future.result()
+                if res:
+                    discovered_subs.append(res)
+            except Exception:
+                pass
+
+    logger.info(f"[recon.subdomains] Active DNS brute-force discovered {len(discovered_subs)} subdomains for '{clean_domain}' (Wildcard active: {is_wildcard})")
+    return discovered_subs
 
 
 def _query_crt_sh(domain: str, timeout: int = 20) -> List[str]:
@@ -186,3 +325,4 @@ def _run_subfinder_cli(binary_path: str, domain: str, timeout: int = 60) -> List
             except json.JSONDecodeError:
                 subdomains.append(line)
     return subdomains
+

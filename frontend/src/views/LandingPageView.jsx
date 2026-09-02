@@ -183,18 +183,14 @@ export default function LandingPageView({ onEnterConsole, onInitiateScan }) {
             </form>
 
             {/* Plain Stat Strip */}
-            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-[#0e1626] max-w-lg">
+            <div className="grid grid-cols-2 gap-6 pt-6 border-t border-[#0e1626] max-w-sm">
               <div>
-                <div className="text-xl font-display font-black text-cyan-signal">8-stage</div>
+                <div className="text-xl font-display font-black text-cyan-signal">10-stage</div>
                 <div className="text-[11px] font-mono text-text-dim">pipeline</div>
               </div>
               <div>
-                <div className="text-xl font-display font-black text-emerald-400">Free-tool</div>
-                <div className="text-[11px] font-mono text-text-dim">backbone</div>
-              </div>
-              <div>
-                <div className="text-xl font-display font-black text-text-primary">AI-triaged</div>
-                <div className="text-[11px] font-mono text-text-dim">output</div>
+                <div className="text-xl font-display font-black text-emerald-400">Zero-noise</div>
+                <div className="text-[11px] font-mono text-text-dim">attack surface</div>
               </div>
             </div>
           </div>

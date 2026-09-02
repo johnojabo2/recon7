@@ -1,7 +1,8 @@
+import html
 import logging
 import re
 import urllib.parse
-from typing import List, Dict, Any, Set, Optional
+from typing import List, Dict, Any, Set, Optional, Tuple
 import httpx
 from bs4 import BeautifulSoup
 from core.scope import extract_root_domain
@@ -15,6 +16,41 @@ LINKEDIN_CLEAN_PATTERNS = [
     r"\s*-\s*United States\s*\|\s*Professional Profile\s*-\s*LinkedIn$",
     r"\s*on LinkedIn:.*$",
 ]
+
+# Comprehensive Job Role, Corporate Title & Department Keywords (Never a human's First/Last Name)
+JOB_ROLE_WORDS = {
+    # Engineering, IT, Software & Tech
+    "engineer", "engineering", "developer", "devops", "architect", "programmer", "coder",
+    "admin", "administrator", "sysadmin", "specialist", "technician", "lead", "leader",
+    "qa", "tester", "sre", "consultant", "analyst", "scientist", "researcher", "security",
+    "infrastructure", "network", "cybersecurity", "frontend", "backend", "fullstack",
+    "stack", "cloud", "data", "database", "ai", "ml", "hardware", "software",
+    
+    # Executive & Corporate Leadership
+    "ceo", "cto", "cfo", "coo", "ciso", "cio", "cpo", "cmo", "cro", "eo", "president",
+    "vice", "vp", "director", "manager", "management", "head", "founder", "cofounder",
+    "co-founder", "chief", "executive", "officer", "principal", "partner", "investor",
+    "board", "advisor", "advisory", "fellow", "trustee", "owner", "chair", "chairman",
+    "chairperson",
+    
+    # Product, Design, Media & Content
+    "product", "designer", "design", "ui", "ux", "media", "content", "creator", "editor",
+    "writer", "copywriter", "author", "journalist", "reporter", "host", "producer",
+    "animator", "artist", "illustrator", "creative", "brand", "branding",
+    
+    # Business, Sales, Marketing, HR, People & Operations
+    "sales", "marketing", "operations", "recruiter", "talent", "recruiting", "people",
+    "culture", "hr", "human", "resources", "finance", "accounting", "accountant",
+    "auditor", "legal", "counsel", "attorney", "lawyer", "advocate", "strategist",
+    "strategy", "coordinator", "supervisor", "associate", "intern", "trainee",
+    "representative", "rep", "agent", "assistant", "clerk", "support", "success",
+    "customer", "client", "relations", "communications", "public", "pr", "growth",
+    "revenue", "procurement", "logistics", "supply", "chain",
+    
+    # Academic, Educational & General
+    "professor", "prof", "lecturer", "instructor", "teacher", "student", "alumni", "graduate",
+    "member", "staff", "personnel", "team", "scholar",
+}
 
 INVALID_WORDS = {
     # Technical & Navigation Noise
@@ -33,7 +69,7 @@ INVALID_WORDS = {
     "visit", "us", "read", "more", "learn", "click", "here",
     "follow", "share", "like", "subscribe", "see", "all", "view",
     "show", "home", "back", "next", "press", "release", "news",
-    "blog", "events", "admin", "administrator", "official",
+    "blog", "events", "official",
     # Corporate & Institutional Suffixes (blocks "NotJustEvent, Inc.", "Acme LLC")
     "inc", "llc", "ltd", "corp", "corporation", "co", "company",
     "technologies", "tech", "group", "studios", "holdings", "solutions",
@@ -45,13 +81,15 @@ INVALID_WORDS = {
 
 
 def clean_human_name(name: str, org_name: str = "") -> str:
-    """Extracts and formats a clean human First & Last name; returns empty string if not a human."""
+    """Extracts and formats a clean human First & Last name; returns empty string if not a human or is a role."""
     if not name or len(name.strip()) < 3:
         return ""
     
-    clean = re.sub(r"\(.*?\)", "", name)
+    # Unescape HTML entities (e.g. &amp; -> &)
+    clean = html.unescape(name)
+    clean = re.sub(r"\(.*?\)", "", clean)
     clean = re.sub(r"\s*\|\s*.*$", "", clean)
-    clean = re.sub(r"\s*[-–]\s*.*$", "", clean)
+    clean = re.sub(r"\s*[-–—]\s*.*$", "", clean)
     clean = clean.strip()
     
     # Strip trailing corporate abbreviations separated by comma (e.g. "NotJustEvent, Inc.")
@@ -66,16 +104,19 @@ def clean_human_name(name: str, org_name: str = "") -> str:
         return ""
         
     org_lower = org_name.lower().replace(" ", "").replace("_", "").replace("-", "") if org_name else ""
+    clean_no_space = "".join(re.sub(r"[^a-zA-Z]", "", w).lower() for w in words)
     
+    # Reject if candidate is literally just the organization name itself (e.g. "NotJustEvent" or "Ojabo")
+    if org_lower and len(org_lower) >= 3 and clean_no_space == org_lower:
+        return ""
+
     formatted_words = []
     for w in words:
         w_clean = re.sub(r"[^a-zA-Z]", "", w).lower()
         # Reject empty or single-letter names (e.g. "FULafia V" -> last name "v")
         if not w_clean or len(w_clean) < 2:
             return ""
-        if org_lower and len(org_lower) > 3 and org_lower in w_clean:
-            return ""
-        if w_clean in INVALID_WORDS:
+        if w_clean in INVALID_WORDS or w_clean in JOB_ROLE_WORDS:
             return ""
         formatted_words.append(w_clean.capitalize())
         
@@ -87,6 +128,72 @@ def clean_human_name(name: str, org_name: str = "") -> str:
 
 def is_valid_human_name(name: str, org_name: str = "") -> bool:
     return bool(clean_human_name(name, org_name))
+
+
+def _parse_linkedin_title_and_slug(raw_title: str, href: str, clean_org: str) -> Tuple[str, str]:
+    """
+    Accurately extracts genuine Human Name and Role/Title from a LinkedIn search result.
+    Resolves reversed formats (e.g. 'Devops Engineer - John Ojabo | LinkedIn' vs 'John Ojabo - Devops Engineer').
+    Uses LinkedIn profile URL slug as authoritative ground-truth disambiguation anchor.
+    """
+    title = html.unescape(raw_title)
+    for pat in LINKEDIN_CLEAN_PATTERNS:
+        title = re.sub(pat, "", title, flags=re.IGNORECASE).strip()
+
+    # 1. Extract ground-truth slug candidate name (e.g. /in/john-ojabo-12345/ -> "John Ojabo")
+    slug_name = ""
+    slug_match = re.search(r"linkedin\.com/in/([a-zA-Z0-9-]+)", href, re.IGNORECASE)
+    if slug_match:
+        raw_slug = slug_match.group(1)
+        # Filter out random trailing hex, numbers or noise tokens
+        slug_tokens = [t.capitalize() for t in raw_slug.split("-") if t.isalpha() and len(t) >= 2]
+        if 2 <= len(slug_tokens) <= 3:
+            cand_slug_name = " ".join(slug_tokens)
+            if is_valid_human_name(cand_slug_name, clean_org):
+                slug_name = cand_slug_name
+
+    parts = [p.strip() for p in re.split(r"\s*[-–—|:]\s*", title) if p.strip()]
+
+    if len(parts) >= 2:
+        p0 = parts[0]
+        p1 = parts[1]
+
+        # If slug name matches part 1, then part 0 is role and part 1 is name!
+        if slug_name:
+            if slug_name.lower() in p1.lower() or p1.lower() in slug_name.lower():
+                return slug_name, p0
+            elif slug_name.lower() in p0.lower() or p0.lower() in slug_name.lower():
+                return slug_name, p1
+
+        # Check which part is a valid human name vs job role
+        name_cand_0 = clean_human_name(p0, clean_org)
+        name_cand_1 = clean_human_name(p1, clean_org)
+
+        if name_cand_0 and not name_cand_1:
+            return name_cand_0, p1
+        elif name_cand_1 and not name_cand_0:
+            return name_cand_1, p0
+        elif name_cand_0 and name_cand_1:
+            p0_has_role = any(w.lower() in JOB_ROLE_WORDS for w in p0.split())
+            p1_has_role = any(w.lower() in JOB_ROLE_WORDS for w in p1.split())
+            if p0_has_role and not p1_has_role:
+                return name_cand_1, p0
+            elif p1_has_role and not p0_has_role:
+                return name_cand_0, p1
+            return name_cand_0, p1
+
+    # Fallback with single part
+    if parts:
+        single_name = clean_human_name(parts[0], clean_org)
+        if single_name:
+            return single_name, f"Staff at {clean_org}"
+
+    # Fallback to slug if title couldn't be parsed
+    if slug_name:
+        role = parts[0] if parts else f"Staff at {clean_org}"
+        return slug_name, role
+
+    return "", ""
 
 
 def enumerate_linkedin_profiles(domain: str, org_name: Optional[str] = None, timeout: int = 15) -> List[Dict[str, Any]]:
@@ -136,44 +243,19 @@ def enumerate_linkedin_profiles(domain: str, org_name: Optional[str] = None, tim
                     continue
                 seen_urls.add(href)
             
-            clean_title = raw_title
-            for pat in LINKEDIN_CLEAN_PATTERNS:
-                clean_title = re.sub(pat, "", clean_title, flags=re.IGNORECASE).strip()
-                
-            name = ""
-            role = f"Staff at {clean_org}"
-            if "-" in clean_title or "–" in clean_title or "|" in clean_title:
-                parts = re.split(r"[-–|]", clean_title)
-                name_cand = clean_human_name(parts[0], clean_org)
-                if name_cand:
-                    name = name_cand
-                    role = parts[1].strip() if len(parts) > 1 else role
-            else:
-                name_cand = clean_human_name(clean_title, clean_org)
-                if name_cand:
-                    name = name_cand
-                    
-            if not name:
-                slug_match = re.search(r"linkedin\.com/in/([a-zA-Z0-9-]+)", href)
-                if slug_match:
-                    slug_parts = [p.capitalize() for p in slug_match.group(1).split("-") if p.isalpha()]
-                    if 2 <= len(slug_parts) <= 3:
-                        candidate_from_slug = clean_human_name(" ".join(slug_parts), clean_org)
-                        if candidate_from_slug:
-                            name = candidate_from_slug
-                            
-            if name and name.lower() not in seen_names:
-                seen_names.add(name.lower())
-                results.append({
-                    "name": name,
-                    "email": "",
-                    "title": role if role else f"Professional at {clean_org}",
-                    "profile_url": href,
-                    "platform": "LinkedIn",
-                    "confidence": 98,
-                    "is_human": True,
-                    "source": "google_search:linkedin",
-                })
+                name, role = _parse_linkedin_title_and_slug(raw_title, href, clean_org)
+                if name and name.lower() not in seen_names:
+                    seen_names.add(name.lower())
+                    results.append({
+                        "name": name,
+                        "email": "",
+                        "title": role if role else f"Professional at {clean_org}",
+                        "profile_url": href,
+                        "platform": "LinkedIn",
+                        "confidence": 98,
+                        "is_human": True,
+                        "source": "google_search:linkedin",
+                    })
     except Exception as e:
         logger.debug(f"Google LinkedIn search failed: {e}")
 
@@ -228,42 +310,9 @@ def _parse_ddg_linkedin_html(
         seen_urls.add(href)
         href_lower = href.lower()
 
-        # Clean title text
-        clean_title = raw_title
-        for pat in LINKEDIN_CLEAN_PATTERNS:
-            clean_title = re.sub(pat, "", clean_title, flags=re.IGNORECASE).strip()
-
         # 1. Individual Employee Profile (/in/) - TOP PRIORITY HUMAN TARGET
         if "/in/" in href_lower:
-            name = ""
-            role = f"Staff at {clean_org}"
-
-            # Extract role
-            if "-" in clean_title or "–" in clean_title or "|" in clean_title:
-                parts = re.split(r"[-–|]", clean_title)
-                name_cand = clean_human_name(parts[0], clean_org)
-                if name_cand:
-                    name = name_cand
-                    role = parts[1].strip() if len(parts) > 1 else role
-                elif len(parts) > 1:
-                    name_cand2 = clean_human_name(parts[1], clean_org)
-                    if name_cand2:
-                        name = name_cand2
-                        role = parts[0].strip()
-            else:
-                name_cand = clean_human_name(clean_title, clean_org)
-                if name_cand:
-                    name = name_cand
-
-            # Fallback: extract from LinkedIn profile slug
-            if not name:
-                slug_match = re.search(r"linkedin\.com/in/([a-zA-Z0-9-]+)", href)
-                if slug_match:
-                    slug_parts = [p.capitalize() for p in slug_match.group(1).split("-") if p.isalpha()]
-                    if 2 <= len(slug_parts) <= 3:
-                        candidate_from_slug = clean_human_name(" ".join(slug_parts), clean_org)
-                        if candidate_from_slug:
-                            name = candidate_from_slug
+            name, role = _parse_linkedin_title_and_slug(raw_title, href, clean_org)
 
             if name and name.lower() not in seen_names:
                 seen_names.add(name.lower())

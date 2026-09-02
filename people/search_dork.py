@@ -255,6 +255,7 @@ def _extract_name_and_role_from_text(text: str, clean_org: str) -> Tuple[str, st
     """
     Extracts a candidate human name and professional role from search result text/title.
     e.g. "John Doe - Chief Technology Officer - Acme Corp | LinkedIn"
+    e.g. "Devops Engineer - John Doe | LinkedIn"
     e.g. "Jane Smith (Founder & CEO) - Acme Corp"
     """
     if not text:
@@ -268,16 +269,21 @@ def _extract_name_and_role_from_text(text: str, clean_org: str) -> Tuple[str, st
         flags=re.IGNORECASE,
     ).strip()
 
-    # Check "Name - Role - Org" pattern
-    parts = [p.strip() for p in re.split(r"\s*[-–—|]\s*", cleaned) if p.strip()]
+    # Check "Name - Role" or "Role - Name" pattern
+    parts = [p.strip() for p in re.split(r"\s*[-–—|:]\s*", cleaned) if p.strip()]
     if len(parts) >= 2:
-        cand_name = parts[0]
-        cand_role = parts[1]
-        if is_valid_human_name(cand_name, clean_org):
-            # If role is just the org, swap or clear
-            if cand_role.lower() == clean_org.lower():
-                cand_role = parts[2] if len(parts) > 2 else "Staff"
-            return cand_name, cand_role
+        cand0 = parts[0]
+        cand1 = parts[1]
+        valid0 = is_valid_human_name(cand0, clean_org)
+        valid1 = is_valid_human_name(cand1, clean_org)
+
+        if valid0 and not valid1:
+            cand_role = parts[2] if cand1.lower() == clean_org.lower() and len(parts) > 2 else cand1
+            return cand0, cand_role
+        elif valid1 and not valid0:
+            return cand1, cand0
+        elif valid0 and valid1:
+            return cand0, cand1
 
     # Check "Name (Role)" pattern
     paren_match = re.search(

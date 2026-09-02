@@ -106,21 +106,30 @@ class ScanAbortedException(Exception):
     pass
 
 
-def _check_if_aborted(tenant_id: str, job_id: str):
-    """Checks database to determine if the scan was cancelled by operator."""
-    with get_db_session() as db:
-        job = (
-            db.query(ScanJob)
-            .filter(ScanJob.tenant_id == tenant_id, ScanJob.id == job_id)
-            .first()
-        )
-        if job and job.status in ("cancelled", "aborted"):
-            raise ScanAbortedException(f"Scan job '{job_id}' was cancelled by operator.")
+def _check_if_aborted(tenant_id: str, job_id: str, context: Optional[Dict[str, Any]] = None):
+    """Checks in-memory abort flag and database to determine if the scan was cancelled by operator."""
+    if context and context.get("abort_event") and context["abort_event"].is_set():
+        raise ScanAbortedException(f"Scan job '{job_id}' was cancelled by operator.")
+    try:
+        with get_db_session() as db:
+            job = (
+                db.query(ScanJob)
+                .filter(ScanJob.tenant_id == tenant_id, ScanJob.id == job_id)
+                .first()
+            )
+            if job and job.status in ("cancelled", "aborted"):
+                if context and context.get("abort_event"):
+                    context["abort_event"].set()
+                raise ScanAbortedException(f"Scan job '{job_id}' was cancelled by operator.")
+    except ScanAbortedException:
+        raise
+    except Exception as e:
+        logger.debug(f"Check abort DB error: {e}")
 
 
-def _checkpoint_step(tenant_id: str, job_id: str, step_name: str):
+def _checkpoint_step(tenant_id: str, job_id: str, step_name: str, context: Optional[Dict[str, Any]] = None):
     """Updates current_step in database for state checkpointing and verifies cancellation."""
-    _check_if_aborted(tenant_id, job_id)
+    _check_if_aborted(tenant_id, job_id, context)
     try:
         with get_db_session() as db:
             update_scan_job(db, tenant_id, job_id, current_step=step_name)
@@ -1508,6 +1517,55 @@ async def execute_pipeline_dag_async(job_id: str, tenant_id: str, target_domain:
             elif f.type == "people":
                 context["people"] = f.data
 
+    abort_event = threading.Event()
+    context["abort_event"] = abort_event
+    stop_abort_monitor = asyncio.Event()
+
+    async def _abort_monitor():
+        while not stop_abort_monitor.is_set():
+            try:
+                with get_db_session() as db:
+                    job = db.query(ScanJob).filter(ScanJob.tenant_id == tenant_id, ScanJob.id == job_id).first()
+                    if job and job.status in ("cancelled", "aborted"):
+                        abort_event.set()
+                        break
+            except Exception:
+                pass
+            try:
+                await asyncio.wait_for(stop_abort_monitor.wait(), timeout=0.5)
+            except asyncio.TimeoutError:
+                pass
+
+    monitor_task = asyncio.create_task(_abort_monitor())
+
+    async def _wait_single(fut):
+        while not fut.done():
+            if abort_event.is_set():
+                if hasattr(fut, "cancel"):
+                    fut.cancel()
+                raise ScanAbortedException(f"Scan job '{job_id}' was cancelled by operator.")
+            await asyncio.sleep(0.1)
+        return await fut
+
+    async def _wait_many(*tasks):
+        pending = list(tasks)
+        while pending:
+            if abort_event.is_set():
+                for p in pending:
+                    if hasattr(p, "cancel"):
+                        p.cancel()
+                raise ScanAbortedException(f"Scan job '{job_id}' was cancelled by operator.")
+            
+            new_pending = []
+            for t in pending:
+                if t.done():
+                    await t
+                else:
+                    new_pending.append(t)
+            pending = new_pending
+            if pending:
+                await asyncio.sleep(0.1)
+
     lock = threading.Lock()
     loop = asyncio.get_running_loop()
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="r7-dag")
@@ -1517,7 +1575,7 @@ async def execute_pipeline_dag_async(job_id: str, tenant_id: str, target_domain:
         # Phase 1: Initial Parallel Reconnaissance
         # Launch Track A (Company Resolve), Track B (Subdomains), and Track C (People OSINT & Exposure) simultaneously
         # -------------------------------------------------------------
-        _check_if_aborted(tenant_id, job_id)
+        _check_if_aborted(tenant_id, job_id, context)
         task_company = loop.run_in_executor(executor, step_1_company_resolve, tenant_id, job_id, context, lock)
         task_subdomains = loop.run_in_executor(executor, step_2_subdomains, tenant_id, job_id, context, lock)
         task_people = loop.run_in_executor(executor, step_8_people, tenant_id, job_id, context, lock)
@@ -1526,16 +1584,16 @@ async def execute_pipeline_dag_async(job_id: str, tenant_id: str, target_domain:
         # Phase 2: Subdomain Handoff -> IP Resolve
         # Once subdomains are known, start IP resolution
         # -------------------------------------------------------------
-        await task_subdomains
-        _check_if_aborted(tenant_id, job_id)
+        await _wait_single(task_subdomains)
+        _check_if_aborted(tenant_id, job_id, context)
         task_ip_resolve = loop.run_in_executor(executor, step_3_ip_resolve, tenant_id, job_id, context, lock)
 
         # -------------------------------------------------------------
         # Phase 3: Network Probing (Ports) & Web Fingerprinting (HTTPX)
         # As soon as IPs are resolved, launch Ports and Web Fingerprint in parallel
         # -------------------------------------------------------------
-        await task_ip_resolve
-        _check_if_aborted(tenant_id, job_id)
+        await _wait_single(task_ip_resolve)
+        _check_if_aborted(tenant_id, job_id, context)
         task_ports = loop.run_in_executor(executor, step_4_ports, tenant_id, job_id, context, lock)
         task_fingerprint = loop.run_in_executor(executor, step_5_fingerprint, tenant_id, job_id, context, lock)
 
@@ -1545,14 +1603,14 @@ async def execute_pipeline_dag_async(job_id: str, tenant_id: str, target_domain:
         # When Ports finish, run CVE correlation!
         # -------------------------------------------------------------
         async def run_nuclei_branch():
-            await task_fingerprint
-            _check_if_aborted(tenant_id, job_id)
-            return await loop.run_in_executor(executor, step_6_nuclei, tenant_id, job_id, context, lock)
+            await _wait_single(task_fingerprint)
+            _check_if_aborted(tenant_id, job_id, context)
+            return await _wait_single(loop.run_in_executor(executor, step_6_nuclei, tenant_id, job_id, context, lock))
 
         async def run_cve_branch():
-            await asyncio.gather(task_ports, task_fingerprint)
-            _check_if_aborted(tenant_id, job_id)
-            return await loop.run_in_executor(executor, step_7_cve, tenant_id, job_id, context, lock)
+            await _wait_many(task_ports, task_fingerprint)
+            _check_if_aborted(tenant_id, job_id, context)
+            return await _wait_single(loop.run_in_executor(executor, step_7_cve, tenant_id, job_id, context, lock))
 
         task_nuclei = asyncio.create_task(run_nuclei_branch())
         task_cve = asyncio.create_task(run_cve_branch())
@@ -1561,15 +1619,15 @@ async def execute_pipeline_dag_async(job_id: str, tenant_id: str, target_domain:
         # Phase 5: Global Synchronization Barrier
         # Wait for all parallel upstream branches to complete
         # -------------------------------------------------------------
-        await asyncio.gather(task_company, task_people, task_nuclei, task_cve)
-        _check_if_aborted(tenant_id, job_id)
+        await _wait_many(task_company, task_people, task_nuclei, task_cve)
+        _check_if_aborted(tenant_id, job_id, context)
 
         # -------------------------------------------------------------
         # Phase 6: Final Convergence (AI Triage & Executive Report)
         # -------------------------------------------------------------
-        await loop.run_in_executor(executor, step_9_ai_triage, tenant_id, job_id, context, lock)
-        _check_if_aborted(tenant_id, job_id)
-        await loop.run_in_executor(executor, step_10_report, tenant_id, job_id, context, lock)
+        await _wait_single(loop.run_in_executor(executor, step_9_ai_triage, tenant_id, job_id, context, lock))
+        _check_if_aborted(tenant_id, job_id, context)
+        await _wait_single(loop.run_in_executor(executor, step_10_report, tenant_id, job_id, context, lock))
 
         # Mark Job Complete
         with get_db_session() as db:
@@ -1593,7 +1651,13 @@ async def execute_pipeline_dag_async(job_id: str, tenant_id: str, target_domain:
             update_scan_job(db, tenant_id, job_id, status="failed", error_message=str(e))
         return False
     finally:
-        executor.shutdown(wait=False)
+        stop_abort_monitor.set()
+        if not monitor_task.done():
+            monitor_task.cancel()
+        try:
+            executor.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            executor.shutdown(wait=False)
 
 
 def execute_pipeline_for_job(job_id: str, tenant_id: str, target_domain: str) -> bool:
