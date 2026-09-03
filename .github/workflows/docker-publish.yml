@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       custom_tag:
-        description: 'Optional custom tag name (e.g. dev, staging, v1.0.0)'
+        description: 'dev v1.0.0)'
         required: false
         default: 'latest'
 
