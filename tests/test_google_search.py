@@ -5,7 +5,8 @@ from core.config import settings
 
 
 def test_is_google_search_available():
-    with patch.object(settings, "GOOGLE_SEARCH_API_KEY", "test_key"), \
+    with patch("core.google_search._QUOTA_EXHAUSTED", False), \
+         patch.object(settings, "GOOGLE_SEARCH_API_KEY", "test_key"), \
          patch.object(settings, "GOOGLE_SEARCH_ENGINE_ID", "test_cx"):
         assert is_google_search_available() is True
 
@@ -25,8 +26,13 @@ def test_query_google_search_mocked():
 
     with patch.object(settings, "GOOGLE_SEARCH_API_KEY", "test_key"), \
          patch.object(settings, "GOOGLE_SEARCH_ENGINE_ID", "test_cx"), \
+         patch.object(settings, "SERPAPI_API_KEY", ""), \
          patch("httpx.Client.get", return_value=mock_resp):
-        results = query_google_search("site:linkedin.com/in/ Acme", num=5)
+        results = query_google_search("site:linkedin.com/in/ Acme Unique Google CSE", num=5, use_cache=False)
+        assert len(results) == 1
+        assert "Jane Doe" in results[0]["title"]
+
+
 def test_is_serpapi_available():
     from core.google_search import is_serpapi_available
     with patch.object(settings, "SERPAPI_API_KEY", "serp_secret_123"):

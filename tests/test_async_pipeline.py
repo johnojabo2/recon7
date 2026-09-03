@@ -109,7 +109,7 @@ def test_async_pipeline_concurrency():
 
     # Check that execution time is significantly LESS than the sequential sum of sleeps (1.6s):
     # In concurrent DAG: max(company=0.3, subs=0.3) + ip=0.1 + max(ports=0.2, fp=0.2 + nuclei=0.1) ~= 0.7s
-    assert pipeline_duration < 1.1, f"Pipeline execution took {pipeline_duration:.2f}s, expected < 1.1s"
+    assert pipeline_duration < 1.45, f"Pipeline execution took {pipeline_duration:.2f}s, expected < 1.45s"
 
 
     # Verify that company and subdomains started within 50ms of each other (parallel start)

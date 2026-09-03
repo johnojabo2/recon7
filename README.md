@@ -249,7 +249,7 @@ curl -X POST http://127.0.0.1:8080/api/setup/initialize \
 
 ### 2. Authenticate & Obtain Bearer Token
 ```bash
-curl -X POST http://127.0.0.1:8080/api/login \
+curl -X POST http://127.0.0.1:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@ojabo.org",

@@ -57,15 +57,15 @@ def test_graph_and_evidence_api_endpoints():
         doc_id = doc.id
 
     login_res = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"email": "admin@recon7.io", "password": "Admin@12345"},
     )
     assert login_res.status_code == 200
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
-    # 1. Test /scan/{job_id}/graph
-    resp = client.get(f"/scan/{job_id}/graph", headers=headers)
+    # 1. Test /api/scan/{job_id}/graph
+    resp = client.get(f"/api/scan/{job_id}/graph", headers=headers)
     assert resp.status_code == 200
     graph = resp.json()
     assert graph["scan_job_id"] == job_id
@@ -73,16 +73,16 @@ def test_graph_and_evidence_api_endpoints():
     assert graph["edges_count"] >= 3
     assert any(n["canonical_id"] == "domain:graph-test.com" for n in graph["nodes"])
 
-    # 2. Test /scan/{job_id}/graph/expand
-    resp_expand = client.get(f"/scan/{job_id}/graph/expand?entity_id={dom_id}", headers=headers)
+    # 2. Test /api/scan/{job_id}/graph/expand
+    resp_expand = client.get(f"/api/scan/{job_id}/graph/expand?entity_id={dom_id}", headers=headers)
     assert resp_expand.status_code == 200
     expand_data = resp_expand.json()
     assert len(expand_data["nodes"]) >= 2
     assert len(expand_data["edges"]) >= 2
 
-    # 3. Test /scan/{job_id}/graph/path (Connected entities: org -> dom -> sub -> ip)
+    # 3. Test /api/scan/{job_id}/graph/path (Connected entities: org -> dom -> sub -> ip)
     resp_path = client.get(
-        f"/scan/{job_id}/graph/path?source_id={org_id}&target_id={ip_id}",
+        f"/api/scan/{job_id}/graph/path?source_id={org_id}&target_id={ip_id}",
         headers=headers,
     )
     assert resp_path.status_code == 200
@@ -96,7 +96,7 @@ def test_graph_and_evidence_api_endpoints():
 
     # Test disconnected path: doc is disconnected from ip
     resp_nopath = client.get(
-        f"/scan/{job_id}/graph/path?source_id={doc_id}&target_id={ip_id}",
+        f"/api/scan/{job_id}/graph/path?source_id={doc_id}&target_id={ip_id}",
         headers=headers,
     )
     assert resp_nopath.status_code == 200
@@ -104,23 +104,23 @@ def test_graph_and_evidence_api_endpoints():
     assert nopath_data["found"] is False
     assert nopath_data["path_length"] == -1
 
-    # 4. Test /scan/{job_id}/evidence/{evidence_id}
-    resp_ev = client.get(f"/scan/{job_id}/evidence/{ev_id}", headers=headers)
+    # 4. Test /api/scan/{job_id}/evidence/{evidence_id}
+    resp_ev = client.get(f"/api/scan/{job_id}/evidence/{ev_id}", headers=headers)
     assert resp_ev.status_code == 200
     ev_data = resp_ev.json()
     assert ev_data["source"] == "dns"
     assert ev_data["reliability"] == 1.0
     assert "resolves to 198.51.100.1" in ev_data["extracted_claim"]
 
-    # 5. Test /scan/{job_id}/exposures
-    resp_exp = client.get(f"/scan/{job_id}/exposures", headers=headers)
+    # 5. Test /api/scan/{job_id}/exposures
+    resp_exp = client.get(f"/api/scan/{job_id}/exposures", headers=headers)
     assert resp_exp.status_code == 200
     exposures = resp_exp.json()
     assert len(exposures) >= 1
     assert any(e["type"] == "cloud_resource" for e in exposures)
 
-    # 6. Test /scan/{job_id}/documents
-    resp_doc = client.get(f"/scan/{job_id}/documents", headers=headers)
+    # 6. Test /api/scan/{job_id}/documents
+    resp_doc = client.get(f"/api/scan/{job_id}/documents", headers=headers)
     assert resp_doc.status_code == 200
     docs = resp_doc.json()
     assert len(docs) >= 1
